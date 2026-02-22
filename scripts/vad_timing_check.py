@@ -29,57 +29,16 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import subprocess
 import sys
 import time
 import wave
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from srt_utils import parse_srt_file, ms_to_timecode
 
 import webrtcvad
-
-
-# ---------------------------------------------------------------------------
-# SRT parsing
-# ---------------------------------------------------------------------------
-
-TC_RE = re.compile(
-    r'(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})'
-)
-
-
-def tc_to_ms(h, m, s, ms):
-    return int(h) * 3600000 + int(m) * 60000 + int(s) * 1000 + int(ms)
-
-
-def parse_srt(path):
-    with open(path, 'r', encoding='utf-8-sig') as f:
-        content = f.read()
-    cues = []
-    for block in re.split(r'\n\n+', content.strip()):
-        lines = block.split('\n')
-        if len(lines) < 3:
-            continue
-        m = TC_RE.match(lines[1])
-        if not m:
-            continue
-        g = m.groups()
-        cues.append({
-            'num': int(lines[0].strip()),
-            'start_ms': tc_to_ms(*g[:4]),
-            'end_ms': tc_to_ms(*g[4:]),
-            'text': '\n'.join(lines[2:]),
-        })
-    return cues
-
-
-def ms_to_tc(ms):
-    h = ms // 3600000
-    ms %= 3600000
-    m = ms // 60000
-    ms %= 60000
-    s = ms // 1000
-    ms %= 1000
-    return f'{h:02d}:{m:02d}:{s:02d},{ms:03d}'
 
 
 # ---------------------------------------------------------------------------
@@ -94,12 +53,16 @@ def get_cache_path(video_path):
 
 
 def extract_audio(video_path, wav_path):
-    result = subprocess.run(
-        ['ffmpeg', '-i', video_path,
-         '-ac', '1', '-ar', '16000', '-acodec', 'pcm_s16le',
-         '-y', wav_path],
-        capture_output=True, text=True,
-    )
+    try:
+        result = subprocess.run(
+            ['ffmpeg', '-i', video_path,
+             '-ac', '1', '-ar', '16000', '-acodec', 'pcm_s16le',
+             '-y', wav_path],
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        print("Error: ffmpeg not found. Install it with: apt install ffmpeg", file=sys.stderr)
+        sys.exit(1)
     if result.returncode != 0:
         print(f'ffmpeg error:\n{result.stderr}', file=sys.stderr)
         sys.exit(1)
@@ -226,13 +189,13 @@ def match_source_cues(nl_cues, en_cues, tolerance_ms=500):
     for nl in nl_cues:
         matched = []
         for en in en_cues:
-            if nl['start_ms'] - tolerance_ms <= en['start_ms'] <= nl['end_ms'] + tolerance_ms:
+            if nl.start_ms - tolerance_ms <= en.start_ms <= nl.end_ms + tolerance_ms:
                 matched.append(en)
-        if not matched:
-            best = min(en_cues, key=lambda e: abs(e['start_ms'] - nl['start_ms']))
-            if abs(best['start_ms'] - nl['start_ms']) <= tolerance_ms:
+        if not matched and en_cues:
+            best = min(en_cues, key=lambda e: abs(e.start_ms - nl.start_ms))
+            if abs(best.start_ms - nl.start_ms) <= tolerance_ms:
                 matched = [best]
-        matches[nl['num']] = matched
+        matches[nl.index] = matched
     return matches
 
 
@@ -246,9 +209,9 @@ def analyze_cue(nl_cue, en_matches, speech_ends, speech_starts, search_range):
     Returns result dict with deltas.
     """
     # Find nearest speech-end to this cue's end time
-    nearest_end = find_nearest(speech_ends, nl_cue['end_ms'], search_range)
+    nearest_end = find_nearest(speech_ends, nl_cue.end_ms, search_range)
     # Find nearest speech-start to this cue's start time
-    nearest_start = find_nearest(speech_starts, nl_cue['start_ms'], search_range)
+    nearest_start = find_nearest(speech_starts, nl_cue.start_ms, search_range)
 
     end_delta = None
     start_delta = None
@@ -256,28 +219,28 @@ def analyze_cue(nl_cue, en_matches, speech_ends, speech_starts, search_range):
     if nearest_end is not None:
         # Positive = speech ends AFTER subtitle → subtitle cuts off too soon
         # Negative = speech ends BEFORE subtitle → subtitle lingers
-        end_delta = nearest_end - nl_cue['end_ms']
+        end_delta = nearest_end - nl_cue.end_ms
 
     if nearest_start is not None:
         # Positive = speech starts AFTER subtitle → subtitle appears early
         # Negative = speech starts BEFORE subtitle → subtitle appears late
-        start_delta = nearest_start - nl_cue['start_ms']
+        start_delta = nearest_start - nl_cue.start_ms
 
-    en_start = en_matches[0]['start_ms'] if en_matches else None
-    en_end = en_matches[-1]['end_ms'] if en_matches else None
+    en_start = en_matches[0].start_ms if en_matches else None
+    en_end = en_matches[-1].end_ms if en_matches else None
 
     return {
-        'cue_num': nl_cue['num'],
-        'nl_start': nl_cue['start_ms'],
-        'nl_end': nl_cue['end_ms'],
-        'nl_text': nl_cue['text'],
+        'cue_num': nl_cue.index,
+        'nl_start': nl_cue.start_ms,
+        'nl_end': nl_cue.end_ms,
+        'nl_text': nl_cue.text,
         'en_start': en_start,
         'en_end': en_end,
         'speech_end_nearest': nearest_end,
         'speech_start_nearest': nearest_start,
         'end_delta_ms': end_delta,
         'start_delta_ms': start_delta,
-        'nl_end_vs_en': (nl_cue['end_ms'] - en_end) if en_end else None,
+        'nl_end_vs_en': (nl_cue.end_ms - en_end) if en_end else None,
     }
 
 
@@ -303,13 +266,13 @@ def classify_issues(r, threshold_ms, prev_nl=None, next_nl=None):
             # But is the next subtitle covering it?
             suppressed = False
             if next_nl and r['speech_end_nearest'] is not None:
-                if next_nl['start_ms'] <= r['speech_end_nearest']:
+                if next_nl.start_ms <= r['speech_end_nearest']:
                     suppressed = True
-                elif next_nl['start_ms'] - r['nl_end'] <= 200:
+                elif next_nl.start_ms - r['nl_end'] <= 200:
                     suppressed = True
 
             if not suppressed:
-                gap_to_next = (next_nl['start_ms'] - r['nl_end']) if next_nl else None
+                gap_to_next = (next_nl.start_ms - r['nl_end']) if next_nl else None
                 # Check if EN source had the same end time (inherited issue)
                 inherited = en_end is not None and abs(r['nl_end'] - en_end) <= 200
                 detail = f'Speech continues {ed}ms after subtitle ends'
@@ -341,7 +304,7 @@ def classify_issues(r, threshold_ms, prev_nl=None, next_nl=None):
         if sd < -threshold_ms:
             suppressed = False
             if prev_nl:
-                if prev_nl['end_ms'] >= r['nl_start'] - 200:
+                if prev_nl.end_ms >= r['nl_start'] - 200:
                     suppressed = True
 
             if not suppressed:
@@ -371,7 +334,7 @@ def classify_issues(r, threshold_ms, prev_nl=None, next_nl=None):
 # ---------------------------------------------------------------------------
 
 def print_issue(r):
-    nl_tc = f'{ms_to_tc(r["nl_start"])} → {ms_to_tc(r["nl_end"])}'
+    nl_tc = f'{ms_to_timecode(r["nl_start"])} → {ms_to_timecode(r["nl_end"])}'
     text_preview = r['nl_text'].replace('\n', ' | ')
     if len(text_preview) > 60:
         text_preview = text_preview[:57] + '...'
@@ -382,11 +345,11 @@ def print_issue(r):
         print(f'       {sev}  {issue["detail"]}')
 
     if r['speech_end_nearest'] is not None:
-        print(f'         Speech ends at: {ms_to_tc(r["speech_end_nearest"])}')
+        print(f'         Speech ends at: {ms_to_timecode(r["speech_end_nearest"])}')
     if r['en_end'] is not None:
-        en_tc = f'{ms_to_tc(r["en_start"])} → {ms_to_tc(r["en_end"])}'
+        en_tc = f'{ms_to_timecode(r["en_start"])} → {ms_to_timecode(r["en_end"])}'
         print(f'         EN source:      {en_tc}')
-        if r['nl_end_vs_en'] and abs(r['nl_end_vs_en']) > 200:
+        if r['nl_end_vs_en'] is not None and abs(r['nl_end_vs_en']) > 200:
             direction = 'extended' if r['nl_end_vs_en'] > 0 else 'shortened'
             print(f'         NL end {direction} {abs(r["nl_end_vs_en"])}ms vs EN')
     print()
@@ -449,8 +412,8 @@ def main():
           f'{len(speech_starts)} speech segments detected')
 
     # --- Parse SRTs ---
-    nl_cues = parse_srt(args.nl_srt)
-    en_cues = parse_srt(args.en_srt)
+    nl_cues = parse_srt_file(args.nl_srt)[0]
+    en_cues = parse_srt_file(args.en_srt)[0]
     print(f'Cues: {len(nl_cues)} NL, {len(en_cues)} EN')
 
     # --- Match NL → EN ---
@@ -461,7 +424,7 @@ def main():
     flagged = []
 
     for idx, nl in enumerate(nl_cues):
-        en_match = matches.get(nl['num'], [])
+        en_match = matches.get(nl.index, [])
         result = analyze_cue(nl, en_match, speech_ends, speech_starts, search_range=2000)
         all_results.append(result)
 

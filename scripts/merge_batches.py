@@ -8,68 +8,41 @@ Usage:
 """
 
 import sys
-import re
 import argparse
 from pathlib import Path
 
-
-def parse_srt_cues(content: str) -> list[dict]:
-    """Parse SRT content into list of cue dictionaries."""
-    cues = []
-    
-    # Normalize line endings and split into blocks
-    content = content.replace('\r\n', '\n').replace('\r', '\n')
-    blocks = re.split(r'\n\n+', content.strip())
-    
-    for block in blocks:
-        block = block.strip()
-        if not block:
-            continue
-            
-        lines = block.split('\n')
-        if len(lines) < 3:
-            continue
-            
-        # Validate structure: number, timestamp, text
-        if not lines[0].strip().isdigit():
-            continue
-        if '-->' not in lines[1]:
-            continue
-            
-        cues.append({
-            'timestamp': lines[1].strip(),
-            'text': '\n'.join(lines[2:])
-        })
-    
-    return cues
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from srt_utils import parse_srt, write_srt
 
 
 def merge_batches(input_files: list[str], output_file: str) -> dict:
     """
     Merge multiple SRT batch files into one, renumbering cues sequentially.
-    
+
     Returns stats dict with cue counts.
     """
-    all_cues = []
+    all_subs = []
     stats = {'input_files': len(input_files), 'cues_per_file': []}
-    
+
     for filepath in input_files:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        cues = parse_srt_cues(content)
-        stats['cues_per_file'].append((filepath, len(cues)))
-        all_cues.extend(cues)
-    
-    # Write merged file with sequential numbering
-    with open(output_file, 'w', encoding='utf-8') as f:
-        for i, cue in enumerate(all_cues, 1):
-            f.write(f"{i}\n")
-            f.write(f"{cue['timestamp']}\n")
-            f.write(f"{cue['text']}\n")
-            f.write("\n")
-    
-    stats['total_cues'] = len(all_cues)
+        try:
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                content = f.read()
+        except (UnicodeDecodeError, OSError) as e:
+            print(f"Error reading {filepath}: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        subs, errors = parse_srt(content)
+        stats['cues_per_file'].append((filepath, len(subs)))
+        all_subs.extend(subs)
+
+    # Renumber sequentially
+    for i, sub in enumerate(all_subs, 1):
+        sub.index = i
+
+    write_srt(all_subs, output_file)
+
+    stats['total_cues'] = len(all_subs)
     return stats
 
 
@@ -78,8 +51,8 @@ def main():
         description='Safely merge SRT batch files without boundary corruption'
     )
     parser.add_argument(
-        'inputs', 
-        nargs='+', 
+        'inputs',
+        nargs='+',
         help='Input SRT batch files in order'
     )
     parser.add_argument(
@@ -92,17 +65,17 @@ def main():
         action='store_true',
         help='Print merge statistics'
     )
-    
+
     args = parser.parse_args()
-    
+
     # Validate inputs exist
     for f in args.inputs:
         if not Path(f).exists():
             print(f"ERROR: Input file not found: {f}", file=sys.stderr)
             sys.exit(1)
-    
+
     stats = merge_batches(args.inputs, args.output)
-    
+
     if args.verbose:
         print(f"Merged {stats['input_files']} files:")
         for filepath, count in stats['cues_per_file']:

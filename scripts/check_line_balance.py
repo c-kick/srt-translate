@@ -23,54 +23,12 @@ Examples:
     python3 scripts/check_line_balance.py movie.nl.srt --ratio 1.2
 """
 import argparse
-import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from srt_utils import parse_srt_file, write_srt
 from srt_constants import CPS_SOFT_CEILING
-
-# ---------------------------------------------------------------------------
-# SRT parsing
-# ---------------------------------------------------------------------------
-
-TC_RE = re.compile(
-    r'(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})'
-)
-
-
-def tc_to_ms(h, m, s, ms):
-    return int(h) * 3600000 + int(m) * 60000 + int(s) * 1000 + int(ms)
-
-
-def parse_srt(path):
-    with open(path, 'r', encoding='utf-8-sig') as f:
-        content = f.read()
-    cues = []
-    for block in re.split(r'\n\n+', content.strip()):
-        lines = block.split('\n')
-        if len(lines) < 3:
-            continue
-        m = TC_RE.match(lines[1])
-        if not m:
-            continue
-        g = m.groups()
-        start = tc_to_ms(*g[:4])
-        end = tc_to_ms(*g[4:])
-        cues.append({
-            'num': lines[0].strip(),
-            'timecode': lines[1],
-            'text_lines': lines[2:],
-            'duration_ms': end - start,
-            'raw': block,
-        })
-    return cues
-
-
-def write_srt(cues, path):
-    blocks = []
-    for cue in cues:
-        block = cue['num'] + '\n' + cue['timecode'] + '\n' + '\n'.join(cue['text_lines'])
-        blocks.append(block)
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write('\n\n'.join(blocks) + '\n')
 
 
 # ---------------------------------------------------------------------------
@@ -324,9 +282,9 @@ def main():
     )
     args = parser.parse_args()
 
-    cues = parse_srt(args.srt_file)
-    two_line = [c for c in cues if len(c['text_lines']) == 2
-                and not is_dual_speaker(c['text_lines'])]
+    cues, _errors = parse_srt_file(args.srt_file)
+    two_line = [c for c in cues if len(c.text.split('\n')) == 2
+                and not is_dual_speaker(c.text.split('\n'))]
 
     max_chars = 42
     flagged = []
@@ -336,13 +294,14 @@ def main():
     skipped_cps = 0
 
     for cue in cues:
-        if len(cue['text_lines']) != 2 or is_dual_speaker(cue['text_lines']):
+        text_lines = cue.text.split('\n')
+        if len(text_lines) != 2 or is_dual_speaker(text_lines):
             continue
 
-        issues = check_balance(cue['text_lines'])
+        issues = check_balance(text_lines)
 
         # Check if this two-line cue fits on a single line
-        full_text = ' '.join(line.rstrip() for line in cue['text_lines'])
+        full_text = ' '.join(line.rstrip() for line in text_lines)
         can_unbreak = len(full_text) <= max_chars
 
         if not issues and not can_unbreak:
@@ -360,29 +319,29 @@ def main():
         suggestion = find_best_break(full_text, max_chars)
 
         # Discard suggestion if it's identical to what's already there
-        if suggestion and list(suggestion) == [l.rstrip() for l in cue['text_lines']]:
+        if suggestion and list(suggestion) == [l.rstrip() for l in text_lines]:
             suggestion = None
 
         entry = {
-            'cue_num': cue['num'],
-            'current': cue['text_lines'],
+            'cue_num': str(cue.index),
+            'current': text_lines,
             'issues': issues,
             'suggestion': full_text if can_unbreak else suggestion,
         }
         flagged.append(entry)
 
         if args.fix and can_unbreak:
-            cue['text_lines'] = [full_text]
+            cue.text = full_text
             unbroken += 1
         elif args.fix and suggestion:
             # CPS guard: don't rebalance if it would push CPS over the limit
             new_char_count = len(suggestion[0]) + len(suggestion[1])
-            duration_s = cue['duration_ms'] / 1000 if cue['duration_ms'] > 0 else 1
+            duration_s = cue.duration_ms / 1000 if cue.duration_ms > 0 else 1
             new_cps = new_char_count / duration_s
             if new_cps > CPS_SOFT_CEILING:
                 skipped_cps += 1
             else:
-                cue['text_lines'] = [suggestion[0], suggestion[1]]
+                cue.text = '\n'.join(suggestion)
                 fixed += 1
         elif args.fix and not suggestion and not can_unbreak:
             unfixable += 1

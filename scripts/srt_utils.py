@@ -5,6 +5,8 @@ Not meant to be called directly.
 """
 
 import re
+import shutil
+import sys
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -226,7 +228,7 @@ def write_srt(subtitles: List[Subtitle], file_path: str) -> None:
     with open(file_path, 'w', encoding='utf-8-sig', newline='') as f:
         for i, sub in enumerate(subtitles):
             if i > 0:
-                f.write('\n')
+                f.write('\r\n')
             f.write(sub.to_srt_block())
 
 
@@ -234,3 +236,12 @@ def subtitles_to_srt(subtitles: List[Subtitle]) -> str:
     """Convert subtitles list to SRT string."""
     blocks = [sub.to_srt_block() for sub in subtitles]
     return '\n'.join(blocks)
+
+
+def require_command(name: str) -> str:
+    """Check that an external command is available. Returns its path or exits with a clear error."""
+    path = shutil.which(name)
+    if path is None:
+        print(f"Error: '{name}' not found in PATH. Please install {name} and try again.", file=sys.stderr)
+        sys.exit(1)
+    return path

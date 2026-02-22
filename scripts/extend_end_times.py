@@ -2,8 +2,9 @@
 """Extend end times for cues with CPS > threshold to reach target CPS."""
 import sys
 import argparse
+from pathlib import Path
 
-sys.path.insert(0, '/mnt/nas/video/.claude/skills/srt-translate/scripts')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from srt_utils import parse_srt_file, write_srt
 
 def main():
