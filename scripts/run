@@ -1,0 +1,28 @@
+#!/bin/bash
+# Wrapper script to run Python scripts with the correct venv
+# Usage: ./run script_name.py [args...]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
+
+if [[ ! -x "$VENV_PYTHON" ]]; then
+    echo "Error: venv not found at $SCRIPT_DIR/.venv" >&2
+    echo "Create it with: python3 -m venv $SCRIPT_DIR/.venv" >&2
+    echo "Then install deps: $SCRIPT_DIR/.venv/bin/pip install chardet language_tool_python" >&2
+    exit 1
+fi
+
+SCRIPT="$1"
+shift
+
+if [[ -z "$SCRIPT" ]]; then
+    echo "Usage: $0 script_name.py [args...]" >&2
+    exit 1
+fi
+
+# If script doesn't have path, assume it's in SCRIPT_DIR
+if [[ "$SCRIPT" != */* ]]; then
+    SCRIPT="$SCRIPT_DIR/$SCRIPT"
+fi
+
+exec "$VENV_PYTHON" "$SCRIPT" "$@"
