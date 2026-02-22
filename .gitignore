@@ -18,3 +18,5 @@ batch_source.srt
 logs/
 checkpoints/
 notify.py
+
+@eaDir
