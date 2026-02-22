@@ -81,6 +81,9 @@ def list_subtitle_streams(video_path: str) -> list[dict]:
                 'title': tags.get('title', ''),
             })
         return streams
+    except FileNotFoundError:
+        print("Error: ffprobe not found. Install ffmpeg (includes ffprobe) with: apt install ffmpeg", file=sys.stderr)
+        return []
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         print(f"Error probing video: {e}", file=sys.stderr)
         return []

@@ -161,11 +161,16 @@ def fix_overlap(sub: Subtitle, prev_sub: Subtitle) -> tuple[int, str | None]:
     gap = sub.start_ms - prev_sub.end_ms
     if gap < 0:
         # Overlap - adjust prev_sub end time
-        new_end = sub.start_ms - MIN_GAP_MS
+        new_end = max(0, sub.start_ms - MIN_GAP_MS)
+        if new_end <= prev_sub.start_ms:
+            # Can't fix: would create zero/negative duration for prev cue
+            return prev_sub.end_ms, f"WARNING: Unfixable overlap at cue {sub.index} (prev cue {prev_sub.index} would get non-positive duration)"
         return new_end, f"Adjusted end time from {prev_sub.end_ms}ms to {new_end}ms (was overlapping by {-gap}ms)"
     elif gap < MIN_GAP_MS:
         # Gap too short - adjust prev_sub end time
-        new_end = sub.start_ms - MIN_GAP_MS
+        new_end = max(0, sub.start_ms - MIN_GAP_MS)
+        if new_end <= prev_sub.start_ms:
+            return prev_sub.end_ms, f"WARNING: Can't enforce min gap at cue {sub.index} (prev cue {prev_sub.index} too short)"
         return new_end, f"Adjusted end time from {prev_sub.end_ms}ms to {new_end}ms (gap was {gap}ms, minimum {MIN_GAP_MS}ms)"
     return prev_sub.end_ms, None
 

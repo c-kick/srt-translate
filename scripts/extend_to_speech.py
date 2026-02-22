@@ -51,6 +51,9 @@ def extract_audio(video_path: str, output_path: str, sample_rate: int = 16000) -
     try:
         subprocess.run(cmd, check=True, capture_output=True)
         return True
+    except FileNotFoundError:
+        print("Error: ffmpeg not found. Install it with: apt install ffmpeg", file=sys.stderr)
+        return False
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg error: {e.stderr.decode()}")
         return False

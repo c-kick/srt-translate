@@ -31,16 +31,14 @@ from srt_utils import parse_srt_file, write_srt, Subtitle
 
 
 # Patterns for SDH content
-# NOTE: These patterns are applied WITHOUT re.IGNORECASE to preserve negative lookahead behavior
-SDH_PATTERNS_CASE_SENSITIVE = [
-    # Bracketed descriptions: [sighs], [music playing], [MUSIC], etc.
-    # Matches anything in brackets EXCEPT acronyms like [FBI] or [NATO]
-    # The negative lookahead (?![A-Z]{2,}\]) prevents matching [FBI] but allows [Sighs]
-    r'\[(?![A-Z]{2,}\])[^\]]*\]',
-]
+# NOTE: Case-sensitive list is empty — all keyword matching uses case-insensitive
+SDH_PATTERNS_CASE_SENSITIVE = []
 
-# Patterns that need case-insensitive matching (applied separately)
+# Patterns that need case-insensitive matching
 SDH_PATTERNS_CASE_INSENSITIVE = [
+    # Bracketed SDH descriptions: [sighs], [music playing], [door slams]
+    # Only matches brackets containing recognized SDH keywords
+    r'\[(?:[^\]]*(?:sighs?|laughs?|coughs?|gasps?|groans?|screams?|whispers?|shouts?|cries?|sobs?|sniffs?|clears?\s+throat|music|playing|singing|humming|whistling|applause|cheering|thunder|explosion|gunshot|doorbell|phone\s+ring|knocking|footsteps|breathing|panting|inaudible|indistinct|silence)[^\]]*)\]',
     # Parenthetical descriptions: (sighs), (MUSIC PLAYING), etc.
     r'\([^)]*(?:sighs?|laughs?|coughs?|gasps?|groans?|screams?|whispers?|shouts?|cries?|sobs?|sniffs?|clears? throat|music|playing|singing|humming|whistling|applause|cheering|thunder|explosion|gunshot|doorbell|phone|knocking|footsteps|breathing|panting)[^)]*\)',
 ]
@@ -52,13 +50,11 @@ SDH_PATTERNS_LITERAL = [
     r'♫[^♫]*♫',
     r'\[♪[^\]]*\]',
     r'\[♫[^\]]*\]',
-    
-    # Sound effects in caps: BANG!, CRASH!, etc (but not dialogue)
-    r'\b(?:BANG|CRASH|BOOM|THUD|SLAM|CLICK|BEEP|RING|BUZZ)\b[!]?',
 ]
 
 # Speaker label pattern: "JOHN:", "MAN 1:", "NARRATOR:"
-SPEAKER_LABEL_PATTERN = r'^[A-Z][A-Z\s\d]*:\s*'
+# Requires 2+ uppercase chars and at least one space after colon
+SPEAKER_LABEL_PATTERN = r'^[A-Z][A-Z\s\d]{1,25}:\s+'
 
 # Hearing impaired specific: >> for speaker change, - for continued
 HI_PATTERNS = [

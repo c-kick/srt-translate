@@ -4,7 +4,7 @@ import sys
 import json
 import argparse
 
-sys.path.insert(0, '/mnt/nas/video/.claude/skills/srt-translate/scripts')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from srt_utils import parse_srt_file, write_srt
 
 def main():
