@@ -2,7 +2,6 @@
 """
 Extend subtitle end times to match actual speech end using WebRTC VAD.
 
-Lightweight alternative to extend_to_speech.py - no PyTorch required.
 Uses Google's WebRTC Voice Activity Detection.
 
 Usage:
