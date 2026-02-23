@@ -26,7 +26,7 @@ The pipeline runs in phase groups, each in a fresh Claude invocation to prevent 
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/srt-translate.git
+git clone https://github.com/c-kick/srt-translate.git
 ```
 
 ### 2. Install the skill in Claude Code
@@ -56,8 +56,10 @@ This installs `ffsubsync`, `webrtcvad`, `pysubs2`, and other dependencies into `
 | Flag | Effect |
 |---|---|
 | `--resume` | Resume from last checkpoint |
+| `--fresh` | Delete checkpoint and start from phase 0 |
 | `--phase N` | Start from phase N |
 | `--speech-sync` | Also run Phase 10 (VAD speech sync) |
+| `--keep-sdh` | Keep SDH cues (default: Claude removes them during translation) |
 
 ### Interactive mode
 
@@ -70,7 +72,7 @@ For individual phases or review tasks, invoke Claude directly with the relevant 
 | 0a | OCR extraction (optional, for burned-in subs) |
 | 0 | Source sync via ffsubsync + WebRTC VAD |
 | 1 | Content classification (documentary / drama / comedy / fast-unscripted) |
-| 2 | Translation — Claude translates in batches of 100 cues |
+| 2 | Translation — Claude translates in batches of 100 cues, removes SDH by default |
 | 3 | Structural fix (line length, overlaps, gap violations) |
 | 4 | Script-based cue merging |
 | 5 | CPS optimization (end-time extension + text condensation) |
