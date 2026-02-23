@@ -42,6 +42,29 @@ V2 inversion on NL 22 because the fronted appositive triggers it.
 
 ---
 
+## SDH handling
+
+The orchestrator passes an **SDH mode** per run. Follow it exactly.
+
+**When SDH mode = REMOVE (default):**
+
+SDH (Subtitles for the Deaf and Hard of Hearing) content describes non-dialogue audio: sound effects, music, speaker identifications. Recognize these by context — do not rely on a fixed keyword list.
+
+- **SDH-only cues** — cues where the entire text is SDH (e.g. `[door closes]`, `♪ dramatic music ♪`, `(GUNSHOT)`): **skip entirely**. Do not write an output cue. This means the output will have fewer cues than the source.
+- **Mixed cues** — cues with both dialogue and SDH tags (e.g. `[laughs] You're kidding me.`): strip the SDH tags, translate only the dialogue.
+- **Speaker labels** — uppercase labels like `JOHN:` or `NARRATOR:` at the start of lines: strip them.
+- **Music notes** — `♪...♪` and `♫...♫` markers: remove.
+
+Common SDH patterns to watch for:
+- Bracketed descriptions: `[sighs]`, `[phone ringing]`, `[speaking French]`
+- Parenthetical descriptions: `(laughs)`, `(THUNDER RUMBLING)`
+- Full-cue sound effects: `[GUNSHOT]`, `[DOOR SLAMS]`
+- Mood/music cues: `♪ Song lyrics here ♪`
+
+**When SDH mode = KEEP:** translate all cues including SDH content as-is.
+
+---
+
 ## Merge decisions (your call)
 
 **Merge when:** two or more EN cues form a single Dutch reading unit AND gap ≤ 1000ms AND combined Dutch ≤ 70 chars AND no speaker change.

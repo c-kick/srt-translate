@@ -265,7 +265,16 @@ def fix_srt(file_path: str, output_path: str | None = None) -> dict:
     
     all_fixes = []
     unfixable = []
-    
+
+    # Remove empty cues (blank, whitespace-only, or linebreak-only)
+    non_empty = []
+    for sub in subtitles:
+        if not sub.text or not sub.text.strip():
+            all_fixes.append(f"Cue {sub.index}: Removed empty cue")
+        else:
+            non_empty.append(sub)
+    subtitles = non_empty
+
     # Check and fix temporal order first
     original_order = [sub.index for sub in subtitles]
     subtitles.sort(key=lambda s: s.start_ms)
@@ -322,7 +331,12 @@ def validate_subtitle(sub: Subtitle, prev_sub: Subtitle | None) -> tuple[list, l
     """Validate a single subtitle cue. Returns (errors, warnings)."""
     errors = []
     warnings = []
-    
+
+    # Empty cue
+    if not sub.text or not sub.text.strip():
+        errors.append(f"Cue {sub.index}: Empty cue (blank or whitespace-only)")
+        return errors, warnings
+
     # Line count
     if sub.line_count > MAX_LINES:
         errors.append(f"Cue {sub.index}: {sub.line_count} lines (max {MAX_LINES})")

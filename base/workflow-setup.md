@@ -7,7 +7,7 @@
 ## Pre-flight Checks
 
 1. Reject paths containing `#recycle`
-2. Check if `${VIDEO_BASE}.nl.srt` exists (stop unless replacement requested)
+2. Check if `${VIDEO_BASE}.nl.srt` exists — if running via orchestrator, overwrite is pre-approved (continue without asking). Only stop in interactive mode if replacement was not requested.
 3. Validate source file exists and is readable
 
 ---

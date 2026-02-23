@@ -40,6 +40,7 @@ RESUME=false
 FRESH=false
 START_PHASE=""
 SPEECH_SYNC=false
+KEEP_SDH=false
 VIDEO_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -48,14 +49,16 @@ while [[ $# -gt 0 ]]; do
         --fresh)        FRESH=true; shift ;;
         --phase)        START_PHASE="$2"; shift 2 ;;
         --speech-sync)  SPEECH_SYNC=true; shift ;;
+        --keep-sdh)     KEEP_SDH=true; shift ;;
         --help|-h)
-            echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--phase N] [--speech-sync]"
+            echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--phase N] [--speech-sync] [--keep-sdh]"
             echo ""
             echo "Options:"
             echo "  --resume        Resume from last checkpoint"
             echo "  --fresh         Delete any checkpoint and start from phase 0 (non-interactive)"
             echo "  --phase N       Start from phase N (0, 2, 3)"
             echo "  --speech-sync   Run Phase 10 (speech sync) after Phase 9"
+            echo "  --keep-sdh      Keep SDH cues (default: remove them before translation)"
             exit 0
             ;;
         -*)             echo "Unknown option: $1" >&2; exit 1 ;;
@@ -65,7 +68,7 @@ done
 
 if [[ -z "$VIDEO_FILE" ]]; then
     echo "Error: No video file specified." >&2
-    echo "Usage: $0 /path/to/video.mkv [--resume] [--phase N] [--speech-sync]" >&2
+    echo "Usage: $0 /path/to/video.mkv [--resume] [--phase N] [--speech-sync] [--keep-sdh]" >&2
     exit 1
 fi
 
@@ -160,7 +163,8 @@ invoke_claude() {
     log "  Context files: $*"
 
     # --allowedTools ensures non-interactive execution
-    echo "$prompt" | claude -p \
+    # Unset CLAUDECODE to allow running from within a Claude Code session
+    echo "$prompt" | env -u CLAUDECODE claude -p \
         --allowedTools "Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
         --output-format text \
         2>"${LOG_DIR}/claude_stderr_$(date +%s).log"
@@ -186,7 +190,7 @@ run_setup() {
 
 Translate the subtitles for this video: ${VIDEO_FILE}
 
-1. Run pre-flight checks
+1. Run pre-flight checks (existing .nl.srt may be overwritten — do NOT ask for confirmation)
 2. Detect and extract source subtitles
 3. Sync source to audio (Phase 0)
 4. Classify content (Phase 1)
@@ -314,6 +318,8 @@ run_translation() {
 Translate cues ${cue_start} through ${cue_end} of the source subtitle file.
 
 **Framerate:** ${framerate} fps — use the corresponding CPS values from the constraints table.
+
+**SDH mode:** $($KEEP_SDH && echo "KEEP — translate SDH cues as-is, preserve all hearing-impaired descriptions." || echo "REMOVE — skip SDH-only cues entirely (do not output them). Strip inline SDH tags from mixed cues (cues with both dialogue and SDH content) before translating the dialogue.")
 
 **Paths:**
 - Source SRT: ${SOURCE_SRT}
@@ -503,6 +509,7 @@ main() {
     log "║  Video: $(basename "$VIDEO_FILE")"
     log "║  Skill: ${SKILL_DIR}"
     log "║  Logs:  ${LOG_DIR}"
+    log "║  SDH:   $($KEEP_SDH && echo "keep" || echo "remove (default)")"
     log "╚══════════════════════════════════════════════╝"
 
     # Determine starting point
