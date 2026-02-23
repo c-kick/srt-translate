@@ -43,18 +43,18 @@ python3 scripts/auto_merge_cues.py draft.nl.srt \
 **2 speakers in one cue (standard):**
 ```
 Waar denk je aan?
-- Aan vanavond.
+-Aan vanavond.
 ```
 - Line 1: Speaker 1 (no dash)
-- Line 2: `- ` + Speaker 2 (dash + space)
+- Line 2: `-` + Speaker 2 (dash, no space)
 
 **3 speakers in one cue (fast dialogue exception):**
 ```
 Hallo, hoe gaat het? -Het gaat goed
-- Had je het tegen mij?
+-Had je het tegen mij?
 ```
-- Line 1: Speaker 1 + ` -` + Speaker 2 (dash WITHOUT space before Speaker 2's text)
-- Line 2: `- ` + Speaker 3 (dash WITH space)
+- Line 1: Speaker 1 + ` -` + Speaker 2 (dash without space before Speaker 2's text)
+- Line 2: `-` + Speaker 3 (dash, no space)
 
 **When to use 3-speaker format:**
 - Panel shows with rapid crosstalk
@@ -150,8 +150,8 @@ Often omittable if visually clear (nodding).
 ## Dialogue Rules
 
 - First speaker: no dash (ever)
-- Second speaker: dash + space (`- `)
-- Third speaker (same cue): first line dash without space (` -`), second line dash with space (`- `)
+- Second speaker: dash, no space (`-`)
+- Third speaker (same cue): first line dash without space (` -`), second line dash no space (`-`)
 - Contractions: use liberally
 - Informal register default
 - Sentence fragments: acceptable

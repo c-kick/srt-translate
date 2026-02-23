@@ -215,7 +215,13 @@ EOF
         die "Checkpoint missing classification. Check $CHECKPOINT_FILE"
     fi
 
-    log "Classification: $classification"
+    local framerate
+    framerate="$(checkpoint_get "Framerate")"
+    if [[ -z "$framerate" ]]; then
+        log "WARNING: Checkpoint missing framerate. Defaulting to 25."
+    fi
+
+    log "Classification: $classification | Framerate: ${framerate:-25}"
     log "Setup complete. Checkpoint: $CHECKPOINT_FILE"
 }
 
@@ -224,10 +230,15 @@ EOF
 run_translation() {
     log "═══ Phase Group: Translation (Phase 2) ═══"
 
-    # Read classification from checkpoint
+    # Read classification and framerate from checkpoint
     local classification
     classification="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
     [[ -z "$classification" ]] && die "No classification in checkpoint"
+
+    local framerate
+    framerate="$(checkpoint_get "Framerate")"
+    [[ -z "$framerate" ]] && framerate=25
+    log "Framerate: $framerate"
 
     local source_cues
     source_cues="$(checkpoint_get "Source cues")"
@@ -302,6 +313,8 @@ run_translation() {
 
 Translate cues ${cue_start} through ${cue_end} of the source subtitle file.
 
+**Framerate:** ${framerate} fps — use the corresponding CPS values from the constraints table.
+
 **Paths:**
 - Source SRT: ${SOURCE_SRT}
 - Output SRT (write here): ${WORK_DIR}/draft.nl.srt
@@ -364,15 +377,36 @@ run_postprocessing() {
     local classification
     classification="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
 
-    # Determine genre merge parameters
+    # Read framerate from checkpoint (default 25 for legacy)
+    local framerate min_gap
+    framerate="$(checkpoint_get "Framerate")"
+    [[ -z "$framerate" ]] && framerate=25
+    if [[ "$framerate" == "24" ]]; then
+        min_gap=125
+    else
+        min_gap=120
+    fi
+
+    # Determine genre merge parameters (fps-aware for documentary/drama)
     local gap_threshold max_duration
     case "$classification" in
-        documentary)    gap_threshold=1000; max_duration=7000 ;;
-        drama)          gap_threshold=1000; max_duration=7000 ;;
+        documentary)
+            gap_threshold=1000
+            [[ "$framerate" == "24" ]] && max_duration=7007 || max_duration=7000
+            ;;
+        drama)
+            gap_threshold=1000
+            [[ "$framerate" == "24" ]] && max_duration=7007 || max_duration=7000
+            ;;
         comedy)         gap_threshold=800;  max_duration=6000 ;;
         fast-unscripted) gap_threshold=500; max_duration=6000 ;;
-        *)              gap_threshold=1000; max_duration=7000 ;;
+        *)
+            gap_threshold=1000
+            [[ "$framerate" == "24" ]] && max_duration=7007 || max_duration=7000
+            ;;
     esac
+
+    log "Framerate: $framerate | Min gap: ${min_gap}ms | Max duration: ${max_duration}ms"
 
     local speech_sync_instruction=""
     if $SPEECH_SYNC; then
@@ -424,8 +458,12 @@ Run post-processing phases 3 through 9 (and log) on the translated draft.
 
 **Genre parameters:**
 - Classification: ${classification}
+- Framerate: ${framerate} fps
 - --gap-threshold: ${gap_threshold}
 - --max-duration: ${max_duration}
+- --min-gap: ${min_gap}
+- --fps: ${framerate}
+- --close-gaps: 1000 (Auteursbond: gaps < 1s closed in Phase 5)
 
 **Checkpoint:**
 $(cat "$CHECKPOINT_FILE")

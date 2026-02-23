@@ -172,7 +172,7 @@ def align_cues(en_subs: List[Subtitle], nl_subs: List[Subtitle],
 def detect_dual_speaker(text: str) -> bool:
     """Check if a cue contains dual-speaker formatting."""
     lines = text.split('\n')
-    return len(lines) == 2 and lines[1].startswith('- ')
+    return len(lines) == 2 and lines[1].startswith('-')
 
 
 def detect_idiom_candidate(en_text: str, nl_text: str) -> bool:

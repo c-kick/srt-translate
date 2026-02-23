@@ -20,7 +20,7 @@ import json
 import argparse
 import re
 from pathlib import Path
-from srt_utils import parse_srt_file, Subtitle, write_srt
+from srt_utils import parse_srt_file, Subtitle, write_srt, visible_length
 
 from srt_constants import (
     MAX_LINES, MAX_CHARS_PER_LINE, CPS_SOFT_CEILING, MAX_DURATION_MS,
@@ -28,6 +28,7 @@ from srt_constants import (
     NL_CPS_HARD_LIMIT as CPS_HARD_LIMIT,
     NL_MIN_GAP_MS as MIN_GAP_MS,
     NL_MIN_DURATION_MS as MIN_DURATION_MS,
+    get_constraints,
 )
 
 # Forbidden punctuation replacements
@@ -75,7 +76,7 @@ def fix_line_length(text: str, max_length: int = MAX_CHARS_PER_LINE) -> tuple[st
     
     # Check if any line exceeds max_length
     needs_breaking = any(
-        len(line.lstrip('- ')) > max_length for line in lines
+        visible_length(re.sub(r'^-\s?', '', line)) > max_length for line in lines
     )
     
     if not needs_breaking:
@@ -89,17 +90,14 @@ def fix_line_length(text: str, max_length: int = MAX_CHARS_PER_LINE) -> tuple[st
     new_lines = []
     
     for line in lines:
-        # Preserve speaker dash
+        # Preserve speaker dash (no-space format: -Text)
         dash_prefix = ''
         check_line = line
-        if line.startswith('- '):
-            dash_prefix = '- '
-            check_line = line[2:]
-        elif line.startswith('-'):
+        if line.startswith('-'):
             dash_prefix = '-'
-            check_line = line[1:]
-        
-        if len(check_line) <= max_length:
+            check_line = line[1:].lstrip(' ')  # strip optional space for compat
+
+        if visible_length(check_line) <= max_length:
             new_lines.append(line)
             continue
         
@@ -132,7 +130,7 @@ def fix_line_length(text: str, max_length: int = MAX_CHARS_PER_LINE) -> tuple[st
         line2 = ' '.join(line2_words)
         
         # For bottom-heavy: line1 should be shorter than line2
-        if len(line1.lstrip('- ')) > len(line2) and line2:
+        if visible_length(re.sub(r'^-\s?', '', line1)) > visible_length(line2) and line2:
             # Try to rebalance by moving words from line1 to line2
             while line1_words and len(' '.join(line1_words)) > len(' '.join(line2_words)):
                 line2_words.insert(0, line1_words.pop())
@@ -177,41 +175,38 @@ def fix_overlap(sub: Subtitle, prev_sub: Subtitle) -> tuple[int, str | None]:
 
 def fix_speaker_dash(text: str) -> tuple[str, list[str]]:
     """
-    Normalize speaker dash formatting.
+    Normalize speaker dash formatting (Auteursbond: no space after dash).
     Correct format for two speakers in one cue:
         Speaker A text
-        - Speaker B text
-    
+        -Speaker B text
+
     NOT:
         - Speaker A text
         - Speaker B text
-    
+
     Returns (fixed_text, list of fixes applied).
     """
     fixes = []
     lines = text.split('\n')
-    
+
     if len(lines) == 2:
-        # Two-line cue — check for dual speaker format
         line1 = lines[0]
         line2 = lines[1]
-        
+
         # If both lines start with dash, remove from first line
-        if line1.startswith('- ') and line2.strip().startswith('-'):
-            lines[0] = line1[2:]  # Remove '- ' from first line
-            fixes.append("Removed dash from first speaker (correct format: only second speaker gets dash)")
-        elif line1.startswith('-') and not line1.startswith('- ') and line2.strip().startswith('-'):
-            # First line has dash without space
-            lines[0] = line1.lstrip('-').lstrip()
-            fixes.append("Removed dash from first speaker (correct format: only second speaker gets dash)")
-        
-        # Normalize second line dash format
-        if line2.strip().startswith('-') and not line2.startswith('- '):
-            # Has dash but missing space, or has wrong format
+        if line1.startswith('-'):
+            stripped = line1.lstrip('-').lstrip()
+            if line2.strip().startswith('-'):
+                lines[0] = stripped
+                fixes.append("Removed dash from first speaker (correct format: only second speaker gets dash)")
+
+        # Normalize second line to -Text (no space after dash)
+        if line2.strip().startswith('-'):
             stripped = line2.lstrip('-').lstrip()
-            lines[1] = '- ' + stripped
-            fixes.append("Normalized second speaker dash to '- '")
-    
+            if lines[1] != '-' + stripped:
+                lines[1] = '-' + stripped
+                fixes.append("Normalized second speaker dash to '-Text' (no space)")
+
     return '\n'.join(lines), fixes
 
 
@@ -296,8 +291,9 @@ def fix_srt(file_path: str, output_path: str | None = None) -> dict:
         # Check line length (unfixable if already at 2 lines)
         for i, line in enumerate(sub.text.split('\n')):
             check_line = re.sub(r'^-\s?', '', line)
-            if len(check_line) > MAX_CHARS_PER_LINE:
-                unfixable.append(f"Cue {sub.index} line {i+1}: {len(check_line)} chars exceeds {MAX_CHARS_PER_LINE} (requires manual condensation)")
+            vlen = visible_length(check_line)
+            if vlen > MAX_CHARS_PER_LINE:
+                unfixable.append(f"Cue {sub.index} line {i+1}: {vlen} chars exceeds {MAX_CHARS_PER_LINE} (requires manual condensation)")
         
         prev_sub = sub
     
@@ -336,8 +332,9 @@ def validate_subtitle(sub: Subtitle, prev_sub: Subtitle | None) -> tuple[list, l
     for i, line in enumerate(lines):
         # Strip speaker dash for length calculation
         check_line = re.sub(r'^-\s?', '', line)
-        if len(check_line) > MAX_CHARS_PER_LINE:
-            errors.append(f"Cue {sub.index} line {i+1}: {len(check_line)} chars (limit {MAX_CHARS_PER_LINE})")
+        vlen = visible_length(check_line)
+        if vlen > MAX_CHARS_PER_LINE:
+            errors.append(f"Cue {sub.index} line {i+1}: {vlen} chars (limit {MAX_CHARS_PER_LINE})")
     
     # CPS
     if sub.duration_seconds > 0:
@@ -414,7 +411,7 @@ def validate_subtitle(sub: Subtitle, prev_sub: Subtitle | None) -> tuple[list, l
                 # Has dash but wrong format
                 pass  # Hard to validate without more context
         # First line should NOT have dash (unless fast dialog exception)
-        if lines[0].strip().startswith('- '):
+        if lines[0].strip().startswith('-'):
             warnings.append(f"Cue {sub.index}: First line starts with dash (should be second speaker only)")
 
     # Duplicate/near-duplicate text with adjacent cue
@@ -504,13 +501,26 @@ def main():
                         help='Show only aggregate stats (suppress individual violations)')
     parser.add_argument('--report', '-r', metavar='FILE',
                         help='Write full validation report to JSON file')
+    parser.add_argument('--fps', type=int, choices=[24, 25],
+                        help='Framerate (24 or 25). Overrides default constraint values.')
     args = parser.parse_args()
     
+    # Override module-level constants if --fps is provided
+    global CPS_TARGET, CPS_HARD_LIMIT, MIN_GAP_MS, MIN_DURATION_MS, CPS_SOFT_CEILING, MAX_DURATION_MS
+    if args.fps:
+        c = get_constraints(args.fps, 'nl')
+        CPS_TARGET = c['cps_optimal']
+        CPS_SOFT_CEILING = c['cps_hard_limit']
+        CPS_HARD_LIMIT = c['cps_emergency_max']
+        MIN_GAP_MS = c['min_gap_ms']
+        MIN_DURATION_MS = c['min_duration_ms']
+        MAX_DURATION_MS = c['max_duration_ms']
+
     file_path = Path(args.file_path)
     if not file_path.exists():
         print(json.dumps({'error': f'File not found: {file_path}'}))
         sys.exit(1)
-    
+
     if args.fix:
         # Fix mode
         result = fix_srt(str(file_path), args.output)

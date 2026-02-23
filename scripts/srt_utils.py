@@ -11,6 +11,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 
+def visible_length(text: str) -> int:
+    """Character count where '...' counts as 1 char, not 3."""
+    return len(text) - (text.count('...') * 2)
+
+
 @dataclass
 class Subtitle:
     """Represents a single subtitle cue."""
@@ -34,8 +39,8 @@ class Subtitle:
     
     @property
     def char_count(self) -> int:
-        """Total visible characters (spaces count, newlines don't)."""
-        return len(self.text.replace('\n', ''))
+        """Total visible characters (spaces count, newlines don't, '...' = 1 char)."""
+        return visible_length(self.text.replace('\n', ''))
     
     @property
     def cps(self) -> float:

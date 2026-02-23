@@ -325,6 +325,25 @@ def classify_issues(r, threshold_ms, prev_nl=None, next_nl=None):
                 'severity': 'low',
                 'detail': f'Subtitle appears {sd}ms before speech starts',
             })
+        elif 0 < sd <= 200:
+            # Ideal anticipation (2-5 frames) — not an issue, counted in stats
+            pass
+        elif sd <= 0:
+            # Subtitle appears same time as or after speech — missing anticipation
+            suppressed = False
+            if prev_nl:
+                if prev_nl.end_ms >= r['nl_start'] - 200:
+                    suppressed = True
+            if not suppressed:
+                inherited = en_start is not None and abs(r['nl_start'] - en_start) <= 200
+                detail = f'Missing anticipation: subtitle starts {-sd}ms after speech'
+                if inherited:
+                    detail += ' [source timing]'
+                issues.append({
+                    'type': 'missing_anticipation',
+                    'severity': 'low' if inherited else 'medium',
+                    'detail': detail,
+                })
 
     return issues
 
@@ -462,6 +481,14 @@ def main():
     elif low:
         print(f'── LOW: {len(low)} cues (use --verbose to show) ──\n')
 
+    # --- Anticipation stats ---
+    ideal_anticipation = sum(1 for r in all_results
+                             if r['start_delta_ms'] is not None and 0 < r['start_delta_ms'] <= 200)
+    no_anticipation = sum(1 for r in all_results
+                          if r['start_delta_ms'] is not None and r['start_delta_ms'] <= 0)
+    missing_antic_flagged = sum(1 for f in flagged
+                                if any(i['type'] == 'missing_anticipation' for i in f.get('issues', [])))
+
     # --- Summary stats ---
     end_deltas = [r['end_delta_ms'] for r in all_results if r['end_delta_ms'] is not None]
     start_deltas = [r['start_delta_ms'] for r in all_results if r['start_delta_ms'] is not None]
@@ -472,6 +499,8 @@ def main():
     if start_deltas:
         print(f'Start delta: avg {sum(start_deltas) / len(start_deltas):+.0f}ms  '
               f'range [{min(start_deltas):+d}ms .. {max(start_deltas):+d}ms]')
+    print(f'Anticipation: {ideal_anticipation} ideal (80-200ms before speech), '
+          f'{no_anticipation} missing/zero, {missing_antic_flagged} flagged')
 
     # --- JSON report ---
     if args.report:
@@ -490,6 +519,9 @@ def main():
                 'high': len(high),
                 'medium': len(medium),
                 'low': len(low),
+                'anticipation_ideal': ideal_anticipation,
+                'anticipation_missing': no_anticipation,
+                'anticipation_flagged': missing_antic_flagged,
             },
             'flagged': flagged,
         }

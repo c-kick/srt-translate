@@ -28,6 +28,7 @@ from srt_constants import (
     EN_CPS_HARD_LIMIT as CPS_HARD_LIMIT,
     EN_MIN_GAP_MS as MIN_GAP_MS,
     EN_MIN_DURATION_MS as MIN_DURATION_MS,
+    get_constraints,
 )
 
 # Typography
@@ -630,7 +631,19 @@ def main():
     parser.add_argument('--output', '-o', help='Output path for fixed file (default: overwrite input)')
     parser.add_argument('--unfixable-indices', action='store_true',
                         help='After --fix, output only cue indices that need manual editing')
+    parser.add_argument('--fps', type=int, choices=[24, 25],
+                        help='Override constraints for specific framerate (24 or 25)')
     args = parser.parse_args()
+
+    if args.fps:
+        global CPS_TARGET, CPS_SOFT_CEILING, CPS_HARD_LIMIT, MIN_GAP_MS, MIN_DURATION_MS, MAX_DURATION_MS
+        c = get_constraints(args.fps, 'en')
+        CPS_TARGET = c['cps_optimal']
+        CPS_SOFT_CEILING = c['cps_hard_limit']
+        CPS_HARD_LIMIT = c['cps_emergency_max']
+        MIN_GAP_MS = c['min_gap_ms']
+        MIN_DURATION_MS = c['min_duration_ms']
+        MAX_DURATION_MS = c['max_duration_ms']
 
     file_path = Path(args.file_path)
     if not file_path.exists():

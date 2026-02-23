@@ -25,7 +25,7 @@ Merging is handled by `scripts/auto_merge_cues.py` in Phase 4.
 | Parameter | Value |
 |-----------|-------|
 | `--gap-threshold` | 1000ms |
-| `--max-duration` | 7000ms |
+| `--max-duration` | 7000ms (25fps) / 7007ms (24fps) |
 | Target ratio | 70-85% |
 
 You do not merge during translation. Translate 1:1, then review after script merge.

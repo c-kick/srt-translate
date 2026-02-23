@@ -17,7 +17,7 @@ python3 scripts/validate_srt.py draft.nl.srt --fix --output draft-fixed.nl.srt
 Fix before merge:
 - Overlapping cues (timestamp errors) — fix first
 - Line length > 42 characters (reflow or shorten)
-- Gap violations (< 120ms)
+- Gap violations (< minimum gap, framerate-dependent)
 - 3+ line cues (restructure to 2 lines max)
 
 **Do NOT fix:** CPS violations. Merging extends durations and lowers CPS naturally.
@@ -62,6 +62,16 @@ Validate CPS on the merged file:
 python3 scripts/validate_srt.py merged.nl.srt --summary --report cps_validation.json
 ```
 
+### Step 0: Close Small Gaps (Auteursbond)
+
+Gaps shorter than 1 second should be closed by extending end times (Auteursbond: "aansluiten"):
+
+```bash
+python3 scripts/extend_end_times.py merged.nl.srt \
+  --close-gaps 1000 --min-gap ${MIN_GAP} --max-duration ${MAX_DURATION} \
+  -o merged.nl.srt
+```
+
 ### Step 1: Extend End Times (ALL cues with CPS > 13)
 
 **This is the primary CPS tool.** For EVERY cue with CPS above 13, extend the end time to fill the available gap before the next cue. Target CPS: **12.5**.
@@ -69,18 +79,18 @@ python3 scripts/validate_srt.py merged.nl.srt --summary --report cps_validation.
 ```
 For each cue where CPS > 13:
   available_gap = next_cue_start - current_cue_end
-  if available_gap > 120ms:
-    extend end time, leaving 120ms minimum gap
+  if available_gap > ${MIN_GAP}ms:
+    extend end time, leaving ${MIN_GAP}ms minimum gap
     recalculate CPS
 ```
 
 This is a mechanical operation. Do it for ALL qualifying cues, not just outliers. The user's expectation is CPS 12-12.5 wherever display time permits.
 
-### Step 2: Text Condensation (only for CPS still > 17 after extension)
+### Step 2: Text Condensation (only for CPS still > CPS hard limit after extension)
 
-After extending all end times, some cues will still exceed CPS 17 because there's no gap to extend into. Only THEN condense text:
+After extending all end times, some cues will still exceed the CPS hard limit (fps-dependent: 15 at 24fps, 17 at 25fps) because there's no gap to extend into. Only THEN condense text:
 
-- **CPS 17-20:** condense if possible without losing meaning
+- **CPS hard limit to 20:** condense if possible without losing meaning
 - **CPS > 20:** must condense (emergency — meaning loss acceptable)
 
 **Condensation priority order** (try each before the next):
@@ -206,6 +216,7 @@ scripts/venv/bin/python3 scripts/vad_timing_check.py \
 | Cuts off during speech | Subtitle disappears while talking | Extend end time or split |
 | Late start | Speech before subtitle (no prior cue) | Check source sync |
 | Early start | Subtitle before speech (low severity) | Usually fine |
+| Missing anticipation | Subtitle doesn't lead speech by 2-5 frames | Check source timing |
 
 **Context-aware:** Split cues with next subtitle picking up immediately are NOT flagged. Source-inherited issues labeled `[source timing]` and downgraded.
 

@@ -84,8 +84,8 @@ For individual phases or review tasks, invoke Claude directly with the relevant 
 
 - Max 42 characters per line
 - Max 2 lines per cue
-- CPS target: 12 — soft ceiling: 17 — hard limit: 20
-- Minimum cue gap: 120ms (3 frames @ 25fps)
+- CPS optimal: 11 (24fps) / 12 (25fps) — hard limit: 15 (24fps) / 17 (25fps) — emergency max: 20
+- Minimum cue gap: 125ms (24fps) / 120ms (25fps) — always 3 frames
 - 24-hour time format, metric units, imperial conversion
 - No semicolons or exclamation marks (per Auteursbond)
 - Dual-speaker cues: second speaker line only gets a dash

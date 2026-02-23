@@ -26,15 +26,15 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from srt_utils import parse_srt_file, write_srt, Subtitle
+from srt_utils import parse_srt_file, write_srt, Subtitle, visible_length
 
 
 def is_dual_speaker(text: str) -> bool:
     """Check if cue already contains two speakers (has dash on second line)."""
     lines = text.split('\n')
     if len(lines) >= 2:
-        # Second line starts with '- ' = dual speaker
-        if lines[1].strip().startswith('- '):
+        # Second line starts with '-' = dual speaker
+        if lines[1].strip().startswith('-'):
             return True
     # Single line with ' - ' mid-line (inline dual speaker)
     if len(lines) == 1 and re.search(r'\s+-\s+', text):
@@ -106,7 +106,7 @@ def wrap_text(text: str, max_chars: int, max_lines: int) -> tuple[bool, str]:
     if current_line:
         lines.append(' '.join(current_line))
 
-    if len(lines) <= max_lines:
+    if len(lines) <= max_lines and all(visible_length(l) <= max_chars for l in lines):
         return True, '\n'.join(lines)
     return False, ""
 
@@ -133,13 +133,13 @@ def can_merge_text(text1: str, text2: str, max_lines: int, max_chars: int,
         text2_clean = text2.strip()
 
         # Remove any existing dash prefix from text2 (we'll add our own)
-        if text2_clean.startswith('- '):
-            text2_clean = text2_clean[2:]
+        if text2_clean.startswith('-'):
+            text2_clean = text2_clean[1:].lstrip(' ')
 
-        merged = f"{text1_clean}\n- {text2_clean}"
+        merged = f"{text1_clean}\n-{text2_clean}"
         lines = merged.split('\n')
 
-        if len(lines) <= max_lines and all(len(l) <= max_chars for l in lines):
+        if len(lines) <= max_lines and all(visible_length(l) <= max_chars for l in lines):
             return True, merged
         return False, ""
 

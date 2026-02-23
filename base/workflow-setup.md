@@ -62,6 +62,18 @@ If no other subtitles present, may download from opensubtitles.org.
 
 ---
 
+## Framerate Detection
+
+Detect source framerate before starting any phase:
+
+```bash
+ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 "$VIDEO_FILE"
+```
+
+Classify: `< 24.5` → **24**, `≥ 24.5` → **25**. Include in checkpoint.
+
+---
+
 ## Phase 0: Source Sync
 
 **Always run sync.** Ensures source is aligned with audio before translation.
@@ -151,6 +163,7 @@ After classification, write checkpoint to `$CHECKPOINT_FILE`:
 - **Next phase:** 2 (translation)
 
 ## Phase 1 Results
+- **Framerate:** [24 or 25]
 - **Classification:** [documentary/drama/comedy/fast-unscripted]
 - **Source cues:** [count]
 - **OCR used:** [yes/no]

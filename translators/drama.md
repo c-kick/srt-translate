@@ -19,7 +19,7 @@ Merging is handled by `scripts/auto_merge_cues.py` in Phase 4.
 | Parameter | Value |
 |-----------|-------|
 | `--gap-threshold` | 1000ms |
-| `--max-duration` | 7000ms |
+| `--max-duration` | 7000ms (25fps) / 7007ms (24fps) |
 | Target ratio | 60-75% |
 
 You do not merge during translation. Translate 1:1, then review after script merge.
@@ -70,10 +70,10 @@ NL: "Eruit." (not "Eruit!")
 ```
 
 ### Dialogue Rules
-- Second speaker dash only:
+- Second speaker dash only (no space after dash):
   ```
   Waar ga je heen?
-  - Naar huis.
+  -Naar huis.
   ```
 - Never both lines with dashes
 - Single quotes for quotations: `'Zo gaat dat hier.'`

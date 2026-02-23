@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from srt_utils import parse_srt_file, write_srt
+from srt_utils import parse_srt_file, write_srt, visible_length
 from srt_constants import CPS_SOFT_CEILING
 
 
@@ -280,7 +280,15 @@ def main():
         '--verbose', '-v', action='store_true',
         help='Show all checked cues, not just issues',
     )
+    parser.add_argument('--fps', type=int, choices=[24, 25],
+                        help='Override CPS soft ceiling for specific framerate (24 or 25)')
     args = parser.parse_args()
+
+    if args.fps:
+        global CPS_SOFT_CEILING
+        from srt_constants import get_constraints
+        c = get_constraints(args.fps, 'nl')
+        CPS_SOFT_CEILING = c['cps_hard_limit']
 
     cues, _errors = parse_srt_file(args.srt_file)
     two_line = [c for c in cues if len(c.text.split('\n')) == 2
@@ -335,7 +343,7 @@ def main():
             unbroken += 1
         elif args.fix and suggestion:
             # CPS guard: don't rebalance if it would push CPS over the limit
-            new_char_count = len(suggestion[0]) + len(suggestion[1])
+            new_char_count = visible_length(suggestion[0]) + visible_length(suggestion[1])
             duration_s = cue.duration_ms / 1000 if cue.duration_ms > 0 else 1
             new_cps = new_char_count / duration_s
             if new_cps > CPS_SOFT_CEILING:

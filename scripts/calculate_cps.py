@@ -25,6 +25,7 @@ from srt_constants import (
     CPS_SOFT_CEILING,
     CPS_REPORT_HARD_SCRIPTED as CPS_HARD_SCRIPTED,
     CPS_REPORT_HARD_UNSCRIPTED as CPS_HARD_UNSCRIPTED,
+    get_constraints,
 )
 
 
@@ -110,8 +111,15 @@ def main():
                         help='Only output violations')
     parser.add_argument('--stats-only', action='store_true',
                         help='Only output statistics')
+    parser.add_argument('--fps', type=int, choices=[24, 25],
+                        help='Override CPS soft ceiling for specific framerate (24 or 25)')
     args = parser.parse_args()
-    
+
+    if args.fps:
+        global CPS_SOFT_CEILING
+        c = get_constraints(args.fps, 'nl')
+        CPS_SOFT_CEILING = c['cps_hard_limit']
+
     file_path = Path(args.file_path)
     if not file_path.exists():
         print(json.dumps({'error': f'File not found: {file_path}'}))

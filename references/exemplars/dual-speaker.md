@@ -8,7 +8,7 @@ Source: The Remains of the Day (1993) — professional NL broadcast subtitles.
 ## Core Rule Reminder
 
 First line: NEVER starts with dash.
-Second line: starts with "- " (dash + space).
+Second line: starts with "-" (dash, no space after dash).
 
 ---
 

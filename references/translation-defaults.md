@@ -77,13 +77,56 @@ Loaded by the translator when needed. Summary in SKILL.md, full details here.
 - Single-speaker cues never have dashes, even when indicating a new speaker from the previous cue.
 - Text in each line in a dual speaker subtitle must be a contained sentence and should not carry into the preceding or subsequent subtitle. Creating shorter sentences and timing appropriately helps to accommodate this.
 
+### ABBA Avoidance
+
+Never interleave speakers across consecutive cues (A-B-B-A pattern). This confuses the viewer about who is speaking. Restructure dialogue to keep each speaker's content together.
+
+Bad (ABBA):
+```
+A  Ga je mee een eindje wandelen?
+B  -Ik denk het niet...
+
+B  met zulk druilerig weer.
+A  -Dat beetje regen...
+
+A  daar ga je niet dood van.
+B  -Ik ben pas ziek geweest.
+```
+
+Good (restructured):
+```
+A  Ga je mee een eindje wandelen?
+B  -Niet met dit druilerige weer.
+
+A  Van een beetje regen ga je niet dood.
+
+B  Ik ben pas ziek geweest.
+A  -Dan zal de buitenlucht je goed doen.
+```
+
+When restructuring to avoid ABBA: condense, rephrase, or redistribute text so each cue has at most one speaker change (line 1 → line 2), never across cues.
+
+---
+
+## Synchronicity
+
+Match recognizable words to approximately the same position in the subtitle where they appear in speech. Even viewers who don't understand the source language will hear names, "yes", "no", cities, organizations, and emotionally stressed words. If such a word appears early in the spoken line, place it early in the subtitle too.
+
+- Preserve the order of enumerations
+- If splitting a sentence across two cues, ensure the translation in each cue corresponds to what is being said at that moment — not a loose paraphrase that front-loads or delays content
+
+Good synchronicity prevents the jarring effect of hearing a name while reading something unrelated.
+
 ---
 
 ## Line Treatment
 
 - Maximum two lines.
 - Text should usually be kept to one line, unless it exceeds the character limitation.
+- If two short sentences of roughly equal length don't fit on one line, put each on its own line.
+- If two short sentences DO fit on one line, keep them on one line — unless they address different people or are thematically unrelated.
 - Prefer a bottom-heavy pyramid shape for subtitles when multiple line break options present themselves, but avoid having just one or two words on the top line.
+- **Top-line-first reading:** Research shows viewers read line 1 first, glance at the image, then read line 2. Break at a natural pause on line 1 so the viewer gets a complete thought before looking up.
 - Follow these basic principles when the text has to be broken into 2 lines:
 - The line should be broken:
 	- after punctuation marks
