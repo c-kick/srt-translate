@@ -315,7 +315,6 @@ All scripts require `srt_utils.py` in same directory.
 | `auto_merge_cues.py` | Adjacent cue merge | `--gap-threshold --max-duration --report` |
 | `extract_cues.py` | Extract range | `--start N --end M --indices` |
 | `merge_cues.py` | Merge retranslated back | `--output` |
-| `calculate_cps.py` | CPS statistics | `--stats-only` |
 | `renumber_cues.py` | Fix sequence | `--in-place` |
 | `add_credit.py` | Add credit | `--in-place --cps` |
 | `extend_to_speech_lite.py` | Extend to speech end (VAD) | `--aggressiveness --max-extension` |
