@@ -293,7 +293,13 @@ def merge_cues(
             # Record merge in report
             report.append({
                 "output_index": new_index,
+                "output_start_ms": merge_candidates[0].start_ms,
+                "output_end_ms": merge_candidates[-1].end_ms,
                 "source_indices": [mc.index for mc in merge_candidates],
+                "source_timecodes": [
+                    {"start_ms": mc.start_ms, "end_ms": mc.end_ms}
+                    for mc in merge_candidates
+                ],
                 "source_count": len(merge_candidates),
                 "gap_ms": merge_candidates[1].start_ms - merge_candidates[0].end_ms if len(merge_candidates) > 1 else 0,
                 "combined_duration_ms": merged_cue.duration_ms,
