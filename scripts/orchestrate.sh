@@ -41,6 +41,7 @@ FRESH=false
 START_PHASE=""
 SPEECH_SYNC=false
 KEEP_SDH=false
+MAX_BATCHES=0  # 0 = unlimited
 VIDEO_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -50,8 +51,9 @@ while [[ $# -gt 0 ]]; do
         --phase)        START_PHASE="$2"; shift 2 ;;
         --speech-sync)  SPEECH_SYNC=true; shift ;;
         --keep-sdh)     KEEP_SDH=true; shift ;;
+        --max-batches)  MAX_BATCHES="$2"; shift 2 ;;
         --help|-h)
-            echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--phase N] [--speech-sync] [--keep-sdh]"
+            echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--phase N] [--speech-sync] [--keep-sdh] [--max-batches N]"
             echo ""
             echo "Options:"
             echo "  --resume        Resume from last checkpoint"
@@ -59,6 +61,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --phase N       Start from phase N (0, 2, 3)"
             echo "  --speech-sync   Run Phase 10 (speech sync) after Phase 9"
             echo "  --keep-sdh      Keep SDH cues (default: remove them before translation)"
+            echo "  --max-batches N Limit translation to N batches (for testing)"
             exit 0
             ;;
         -*)             echo "Unknown option: $1" >&2; exit 1 ;;
@@ -131,10 +134,10 @@ checkpoint_get() {
         || echo ""
 }
 
-# Count cues in an SRT file
+# Count cues in an SRT file (handles both Unix and Windows line endings)
 count_cues() {
     local n
-    n="$(grep -cE '^[0-9]+$' "$1" 2>/dev/null)" || true
+    n="$(tr -d '\r' < "$1" 2>/dev/null | grep -cE '^[0-9]+$')" || true
     echo "${n:-0}"
 }
 
@@ -165,7 +168,7 @@ invoke_claude() {
     # --allowedTools ensures non-interactive execution
     # Unset CLAUDECODE to allow running from within a Claude Code session
     echo "$prompt" | env -u CLAUDECODE claude -p \
-        --allowedTools "Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
+        --allowedTools "Read,Glob,Grep,Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
         --output-format text \
         2>"${LOG_DIR}/claude_stderr_$(date +%s).log"
 
@@ -268,6 +271,10 @@ run_translation() {
 
     # Calculate batch plan
     local total_batches=$(( (source_cues + BATCH_SIZE - 1) / BATCH_SIZE ))
+    if [[ "$MAX_BATCHES" -gt 0 && "$total_batches" -gt "$MAX_BATCHES" ]]; then
+        log "Capping total batches from $total_batches to $MAX_BATCHES (--max-batches)"
+        total_batches="$MAX_BATCHES"
+    fi
     local start_batch=1
 
     # Check if resuming mid-translation
@@ -288,7 +295,7 @@ run_translation() {
     if [[ "$batches_done" -eq 0 ]]; then
         local highest_batch
         highest_batch="$(find "$BATCH_CONTEXT_DIR" -name 'batch*_context.md' -printf '%f\n' 2>/dev/null \
-            | grep -oP '\d+' | sort -n | tail -1)"
+            | grep -oP '\d+' | sort -n | tail -1 || true)"
         if [[ -n "$highest_batch" && "$highest_batch" -gt 0 ]]; then
             batches_done="$highest_batch"
             log "Derived batches done from context files: ${batches_done} (highest batch context found)"
@@ -526,7 +533,7 @@ EOF
 
 main() {
     log "╔══════════════════════════════════════════════╗"
-    log "║  srt-translate orchestrator v12              ║"
+    log "║  srt-translate orchestrator v13              ║"
     log "╠══════════════════════════════════════════════╣"
     log "║  Video: $(basename "$VIDEO_FILE")"
     log "║  Skill: ${SKILL_DIR}"
@@ -622,16 +629,54 @@ main() {
             ;;
     esac
 
-    # Clean up temp work directory
-    log "Cleaning up temp files..."
-    rm -rf "$WORK_DIR"
+    # ─── Safety net: ensure translated work is never lost ─────────────────────
+    local draft_file="${WORK_DIR}/draft.nl.srt"
+    local draft_cues=0
+    if [[ -f "$draft_file" ]]; then
+        draft_cues="$(count_cues "$draft_file")"
+    fi
 
-    log ""
-    log "═══ Pipeline complete ═══"
+    # Check if post-processing actually produced a fresh output
+    # (output must exist, have cues, AND be newer than the draft)
+    local output_cues=0
+    local output_is_fresh=false
     if [[ -f "$OUTPUT_SRT" ]]; then
-        local final_cues
-        final_cues="$(count_cues "$OUTPUT_SRT")"
-        log "Output: ${OUTPUT_SRT} (${final_cues} cues)"
+        output_cues="$(count_cues "$OUTPUT_SRT")"
+        if [[ -f "$draft_file" ]]; then
+            [[ "$OUTPUT_SRT" -nt "$draft_file" ]] && output_is_fresh=true
+        else
+            # No draft to compare against (e.g. --phase 3 re-run) — trust it
+            output_is_fresh=true
+        fi
+    fi
+
+    if $output_is_fresh && [[ "$output_cues" -gt 0 ]]; then
+        # Post-processing succeeded
+        log "Cleaning up temp files..."
+        rm -rf "$WORK_DIR"
+        log ""
+        log "═══ Pipeline complete ═══"
+        log "Output: ${OUTPUT_SRT} (${output_cues} cues)"
+    elif [[ "$draft_cues" -gt 0 ]]; then
+        # Post-processing failed but draft exists — save it
+        log "WARNING: Post-processing did not produce valid output (${output_cues} cues, fresh=${output_is_fresh})"
+        log "Draft has ${draft_cues} cues — saving to output as safety net"
+        if [[ -f "$OUTPUT_SRT" ]]; then
+            log "Backing up existing output to ${OUTPUT_SRT}.bak"
+            cp "$OUTPUT_SRT" "${OUTPUT_SRT}.bak"
+        fi
+        cp "$draft_file" "$OUTPUT_SRT"
+        log ""
+        log "═══ Pipeline complete (PARTIAL — post-processing failed) ═══"
+        log "Output: ${OUTPUT_SRT} (${draft_cues} cues, raw draft — NOT post-processed)"
+        log "Re-run with --phase 3 to post-process."
+        log "Work dir preserved: ${WORK_DIR}"
+    else
+        # Nothing produced at all
+        log ""
+        log "═══ Pipeline complete (FAILED — no output) ═══"
+        log "Neither post-processing nor translation produced output."
+        [[ -d "$WORK_DIR" ]] && log "Work dir preserved: ${WORK_DIR}"
     fi
     log "Logs: ${LOG_DIR}"
 }
