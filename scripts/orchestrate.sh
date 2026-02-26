@@ -87,7 +87,7 @@ VIDEO_BASENAME="$(basename "$VIDEO_FILE" | sed -E 's/\.(en|nl)\.(srt|sub|ass)$/.
 VIDEO_FILE="$(cd "$VIDEO_DIR" && pwd)/$(basename "$VIDEO_FILE")"
 
 CHECKPOINT_FILE="${LOG_DIR}/${VIDEO_BASENAME}_checkpoint.md"
-BATCH_CONTEXT_DIR="${LOG_DIR}/batch_context"
+BATCH_CONTEXT_DIR="${LOG_DIR}/batch_context_${VIDEO_BASENAME}"
 OUTPUT_SRT="${VIDEO_DIR}/${VIDEO_BASENAME}.nl.srt"
 SOURCE_SRT="${VIDEO_DIR}/${VIDEO_BASENAME}.en.srt"
 WORK_DIR="${LOG_DIR}/work_${VIDEO_BASENAME}"
@@ -545,10 +545,10 @@ main() {
     local start_group="setup"
 
     # --fresh: delete checkpoint + work artifacts and skip prompt
-    if $FRESH && [[ -f "$CHECKPOINT_FILE" ]]; then
+    if $FRESH; then
         rm -f "$CHECKPOINT_FILE"
         rm -rf "$WORK_DIR"
-        rm -f "$BATCH_CONTEXT_DIR"/batch*_context.md
+        rm -rf "$BATCH_CONTEXT_DIR"
         log "Fresh run: checkpoint, work dir, and batch context deleted."
     fi
 
