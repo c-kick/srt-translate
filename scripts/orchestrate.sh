@@ -273,6 +273,28 @@ run_translation() {
     # Check if resuming mid-translation
     local batches_done
     batches_done="$(checkpoint_get "Batches completed" | grep -oP '^\d+' || echo "0")"
+
+    # Fallback: derive from "Last translated cue" if "Batches completed" is missing
+    if [[ "$batches_done" -eq 0 ]]; then
+        local last_cue
+        last_cue="$(checkpoint_get "Last translated cue" | grep -oP '^\d+' || echo "0")"
+        if [[ "$last_cue" -gt 0 ]]; then
+            batches_done=$(( last_cue / BATCH_SIZE ))
+            log "Derived batches done from last translated cue ${last_cue}: ${batches_done}"
+        fi
+    fi
+
+    # Fallback: find highest-numbered batch context file
+    if [[ "$batches_done" -eq 0 ]]; then
+        local highest_batch
+        highest_batch="$(find "$BATCH_CONTEXT_DIR" -name 'batch*_context.md' -printf '%f\n' 2>/dev/null \
+            | grep -oP '\d+' | sort -n | tail -1)"
+        if [[ -n "$highest_batch" && "$highest_batch" -gt 0 ]]; then
+            batches_done="$highest_batch"
+            log "Derived batches done from context files: ${batches_done} (highest batch context found)"
+        fi
+    fi
+
     if [[ "$batches_done" -gt 0 ]]; then
         start_batch=$(( batches_done + 1 ))
         log "Resuming from batch $start_batch (${batches_done} already done)"
@@ -515,10 +537,12 @@ main() {
     # Determine starting point
     local start_group="setup"
 
-    # --fresh: delete checkpoint and skip prompt
+    # --fresh: delete checkpoint + work artifacts and skip prompt
     if $FRESH && [[ -f "$CHECKPOINT_FILE" ]]; then
         rm -f "$CHECKPOINT_FILE"
-        log "Fresh run: checkpoint deleted."
+        rm -rf "$WORK_DIR"
+        rm -f "$BATCH_CONTEXT_DIR"/batch*_context.md
+        log "Fresh run: checkpoint, work dir, and batch context deleted."
     fi
 
     # If a checkpoint exists and no explicit --resume or --phase was given, ask
@@ -536,7 +560,7 @@ main() {
         read -r -p "Choice [r/f/q]: " choice
         case "$choice" in
             r|R) RESUME=true ;;
-            f|F) rm -f "$CHECKPOINT_FILE"; log "Checkpoint deleted. Starting fresh." ;;
+            f|F) rm -f "$CHECKPOINT_FILE"; rm -rf "$WORK_DIR"; rm -f "$BATCH_CONTEXT_DIR"/batch*_context.md; log "Checkpoint, work dir, and batch context deleted. Starting fresh." ;;
             *)   log "Aborted."; exit 0 ;;
         esac
         echo ""
@@ -550,10 +574,25 @@ main() {
 
         log "Resuming from checkpoint. Current: $current_phase | Next: $next_phase"
 
-        case "$next_phase" in
-            *"2"*|*"translation"*|*"Translation"*)  start_group="translation" ;;
-            *"3"*|*"post"*|*"Post"*)                start_group="postprocessing" ;;
-            *)                                       start_group="setup" ;;
+        # Determine resume point from checkpoint fields.
+        # Primary: "Next phase" (set when a phase completes cleanly).
+        # Fallback: "Current phase" (always present — critical for crash recovery
+        # where the interrupted phase never wrote "Next phase").
+        local resume_hint="${next_phase:-$current_phase}"
+
+        case "$resume_hint" in
+            *"2"*|*"translat"*|*"Translat"*)  start_group="translation" ;;
+            *"3"*|*"post"*|*"Post"*)           start_group="postprocessing" ;;
+            *"1"*|*"classif"*|*"setup"*)       start_group="setup" ;;
+            *)
+                # Last resort: check if work dir has a draft → translation was in progress
+                if [[ -f "${WORK_DIR}/draft.nl.srt" ]]; then
+                    log "No phase match from checkpoint, but draft.nl.srt exists — resuming translation"
+                    start_group="translation"
+                else
+                    start_group="setup"
+                fi
+                ;;
         esac
     fi
 
