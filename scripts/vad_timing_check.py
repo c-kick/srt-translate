@@ -200,6 +200,160 @@ def match_source_cues(nl_cues, en_cues, tolerance_ms=500):
 
 
 # ---------------------------------------------------------------------------
+# Merge-aware matching (Level 1)
+# ---------------------------------------------------------------------------
+
+def load_merge_report(path):
+    """Load merge report JSON, return list of merge entries."""
+    if not path or not os.path.exists(path):
+        return []
+    with open(path) as f:
+        data = json.load(f)
+    return data.get('merges', [])
+
+
+def build_merge_timecode_map(merges):
+    """Build lookup: output_start_ms -> source_timecodes list.
+
+    Uses start_ms as key since start times are stable through the pipeline.
+    """
+    tc_map = {}
+    for entry in merges:
+        key = entry.get('output_start_ms')
+        if key is not None:
+            tc_map[key] = entry.get('source_timecodes', [])
+    return tc_map
+
+
+def _match_by_proximity(nl_cue, en_cues, tolerance_ms):
+    """Match single NL cue to EN cues by start-time proximity."""
+    matched = []
+    for en in en_cues:
+        if nl_cue.start_ms - tolerance_ms <= en.start_ms <= nl_cue.end_ms + tolerance_ms:
+            matched.append(en)
+    if not matched and en_cues:
+        best = min(en_cues, key=lambda e: abs(e.start_ms - nl_cue.start_ms))
+        if abs(best.start_ms - nl_cue.start_ms) <= tolerance_ms:
+            matched = [best]
+    return matched
+
+
+def _nearest_en(nl_cue, en_cues, tolerance_ms):
+    """Fallback: find nearest EN cue within tolerance."""
+    if not en_cues:
+        return []
+    best = min(en_cues, key=lambda e: abs(e.start_ms - nl_cue.start_ms))
+    return [best] if abs(best.start_ms - nl_cue.start_ms) <= tolerance_ms else []
+
+
+def match_source_cues_enhanced(nl_cues, en_cues, merge_tc_map=None,
+                               draft_tc_map=None, tolerance_ms=500):
+    """
+    Map NL->EN using merge timecodes + draft mapping + proximity fallback.
+
+    For merged cues: expand to source timecodes, match each to EN.
+    For draft-mapped cues: use the pre-Phase-3 NL->EN timecode chain.
+    For others: use start-time proximity.
+    """
+    matches = {}
+    tc_match_tolerance = 50  # ms tolerance for timecode matching
+
+    for nl in nl_cues:
+        # Strategy 1: Check if this NL cue is a merge result (by start_ms)
+        source_timecodes = None
+        if merge_tc_map:
+            for merge_start, src_tcs in merge_tc_map.items():
+                if abs(nl.start_ms - merge_start) <= tc_match_tolerance:
+                    source_timecodes = src_tcs
+                    break
+
+        if source_timecodes:
+            # Merged cue: find EN cues matching each source time window
+            matched = []
+            for src_tc in source_timecodes:
+                # Try draft mapping first for each source timecode
+                en_from_draft = _draft_lookup(
+                    src_tc['start_ms'], draft_tc_map, en_cues, tc_match_tolerance
+                ) if draft_tc_map else []
+
+                if en_from_draft:
+                    for en in en_from_draft:
+                        if en not in matched:
+                            matched.append(en)
+                else:
+                    # Fall back to proximity for this source window
+                    for en in en_cues:
+                        if (src_tc['start_ms'] - tolerance_ms <= en.start_ms
+                                <= src_tc['end_ms'] + tolerance_ms):
+                            if en not in matched:
+                                matched.append(en)
+            matches[nl.index] = matched if matched else _nearest_en(
+                nl, en_cues, tolerance_ms)
+        else:
+            # Strategy 2: Check draft mapping (non-merged cue)
+            en_from_draft = _draft_lookup(
+                nl.start_ms, draft_tc_map, en_cues, tc_match_tolerance
+            ) if draft_tc_map else []
+
+            if en_from_draft:
+                matches[nl.index] = en_from_draft
+            else:
+                # Strategy 3: existing proximity matching
+                matches[nl.index] = _match_by_proximity(
+                    nl, en_cues, tolerance_ms)
+
+    return matches
+
+
+# ---------------------------------------------------------------------------
+# Draft mapping (Level 2)
+# ---------------------------------------------------------------------------
+
+def load_draft_mapping(path):
+    """Load draft mapping JSON, return list of mapping entries."""
+    if not path or not os.path.exists(path):
+        return []
+    with open(path) as f:
+        data = json.load(f)
+    return data.get('mappings', [])
+
+
+def build_draft_timecode_map(mappings):
+    """Build lookup: nl_start_ms -> en timecode range.
+
+    Each entry maps a draft NL cue's start time to its matched EN cue
+    start/end times.
+    """
+    tc_map = {}
+    for entry in mappings:
+        key = entry.get('nl_start_ms')
+        if key is not None and entry.get('en_start_ms') is not None:
+            tc_map[key] = {
+                'en_start_ms': entry['en_start_ms'],
+                'en_end_ms': entry['en_end_ms'],
+            }
+    return tc_map
+
+
+def _draft_lookup(start_ms, draft_tc_map, en_cues, tolerance):
+    """Look up EN cues via draft mapping for a given start_ms."""
+    if not draft_tc_map:
+        return []
+
+    # Find draft entry matching this start_ms
+    for draft_start, en_range in draft_tc_map.items():
+        if abs(start_ms - draft_start) <= tolerance:
+            # Found draft entry — match EN cues by the mapped timecodes
+            matched = []
+            for en in en_cues:
+                if (en_range['en_start_ms'] - tolerance <= en.start_ms
+                        <= en_range['en_end_ms'] + tolerance):
+                    matched.append(en)
+            return matched
+    return []
+
+
+# ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
 
@@ -405,6 +559,14 @@ def main():
         '--no-cache', action='store_true', help='Re-extract audio from video',
     )
     parser.add_argument(
+        '--merge-report', metavar='FILE',
+        help='Phase 4 merge report JSON (improves NL→EN mapping for merged cues)',
+    )
+    parser.add_argument(
+        '--draft-mapping', metavar='FILE',
+        help='Pre-Phase-3 draft mapping JSON (improves NL→EN mapping via timecodes)',
+    )
+    parser.add_argument(
         '--verbose', '-v', action='store_true',
         help='Show low-severity issues too',
     )
@@ -436,7 +598,26 @@ def main():
     print(f'Cues: {len(nl_cues)} NL, {len(en_cues)} EN')
 
     # --- Match NL → EN ---
-    matches = match_source_cues(nl_cues, en_cues)
+    merge_tc_map = None
+    draft_tc_map = None
+
+    if args.merge_report:
+        merges = load_merge_report(args.merge_report)
+        if merges:
+            merge_tc_map = build_merge_timecode_map(merges)
+            print(f'Merge report: {len(merges)} merges loaded')
+
+    if args.draft_mapping:
+        draft_mappings = load_draft_mapping(args.draft_mapping)
+        if draft_mappings:
+            draft_tc_map = build_draft_timecode_map(draft_mappings)
+            print(f'Draft mapping: {len(draft_mappings)} entries loaded')
+
+    if merge_tc_map or draft_tc_map:
+        matches = match_source_cues_enhanced(
+            nl_cues, en_cues, merge_tc_map, draft_tc_map)
+    else:
+        matches = match_source_cues(nl_cues, en_cues)
 
     # --- Analyze all cues ---
     all_results = []
@@ -512,6 +693,8 @@ def main():
                 'threshold_ms': args.threshold,
                 'aggressiveness': args.aggressiveness,
                 'hangover_ms': hangover_frames * frame_ms,
+                'merge_report': args.merge_report or None,
+                'draft_mapping': args.draft_mapping or None,
             },
             'summary': {
                 'cues_analyzed': len(all_results),

@@ -6,6 +6,17 @@
 
 ---
 
+## Pre-Phase-3: Save Draft Mapping
+
+Before Phase 3 renumbers cues, save the NL→EN timecode correspondence from the draft. This mapping is used in Phase 9 for accurate NL→EN matching even after merges and renumbering.
+
+```bash
+python3 scripts/save_draft_mapping.py draft.nl.srt "${VIDEO_BASENAME}.en.srt" \
+  --output draft_mapping.json
+```
+
+---
+
 ## Phase 3: Structural Fix
 
 Fix structural errors only. **Do NOT condense text for CPS — that happens after merge in Phase 5.**
@@ -207,6 +218,8 @@ scripts/venv/bin/python3 scripts/vad_timing_check.py \
     "$VIDEO_FILE" \
     "${VIDEO_BASENAME}.nl.srt" \
     "${VIDEO_BASENAME}.en.srt" \
+    --merge-report merge_report.json \
+    --draft-mapping draft_mapping.json \
     --report vad_timing.json
 ```
 
@@ -318,4 +331,5 @@ All scripts require `srt_utils.py` in same directory.
 | `add_credit.py` | Add credit | `--in-place --cps` |
 | `extend_to_speech_lite.py` | Extend to speech end (VAD) | `--aggressiveness --max-extension` |
 | `check_line_balance.py` | Line balance QC + auto-fix | `--fix --output --ratio` |
-| `vad_timing_check.py` | VAD timing QC | `--threshold --aggressiveness --report` |
+| `save_draft_mapping.py` | Pre-Phase-3 NL→EN mapping | `--output --tolerance` |
+| `vad_timing_check.py` | VAD timing QC | `--threshold --aggressiveness --merge-report --draft-mapping --report` |
