@@ -8,6 +8,7 @@ Universal rules for all phases. Injected into every pipeline invocation.
 
 Values depend on the source framerate. Determine framerate before starting.
 
+<!-- BEGIN GENERATED CONSTRAINTS -->
 | Constraint | 23.976 / 24 fps | 25 fps |
 |---|---|---|
 | CPS Optimal | 11 | 12 |
@@ -21,6 +22,7 @@ Values depend on the source framerate. Determine framerate before starting.
 | Max lines per cue | 2 | 2 |
 | CPS calculation | All characters (incl. spaces); `...` counts as 1 char | All characters (incl. spaces); `...` counts as 1 char |
 | Merge lines shorter than | 40 chars | 40 chars |
+<!-- END GENERATED CONSTRAINTS -->
 
 ---
 

@@ -28,6 +28,39 @@ Replaced the PocketSphinx approach with timecode-based mapping. See `PLAN.md` fo
 
 If Levels 1+2 prove insufficient, optional Vosk-based forced alignment can be added as a supplementary signal. See `PLAN.md` Level 3 for details.
 
+## Skill Triggering Description
+
+The SKILL.md description could be more aggressive about edge cases to improve trigger accuracy. Currently it may miss unusual phrasings. Consider adding explicit mentions of:
+- Reviewing existing NL subtitles against EN source
+- Requests mentioning `.srt` files with Dutch/Nederlands/NL
+- Subtitle QC or quality check requests for Dutch
+
+## Workflow Density in Post-Processing
+
+`workflow-post.md` covers Phases 3–9+LOG in a single context load. If Claude occasionally skips or conflates phases, the density could be a factor. Consider:
+- Adding explicit phase-transition markers (e.g. "Phase N complete. Proceeding to Phase N+1.")
+- A checklist Claude must tick through before moving to the next phase
+- Splitting post-processing into two phase groups if context pressure becomes an issue
+
+## Batch Context Continuity
+
+Translation batches write context summaries to `batchN_context.md`, and subsequent batches read them. When a new Claude invocation starts (every 6 batches), nuanced character voice decisions or terminology choices from earlier batches may lose fidelity through summarization. Consider:
+- A cumulative running glossary file that grows across all batches (character names, T-V register choices, recurring terminology) rather than per-batch summaries alone
+- Having each new invocation read the glossary in addition to the batch context files
+
+## End-to-End Regression Testing
+
+No automated way to smoke-test the full pipeline. A lightweight regression test could catch regressions faster:
+- Translate the first 20 cues of a known file and check constraint compliance on the output
+- Compare merge ratios and CPS distributions against a reference baseline
+- Could be a `--test` flag on `orchestrate.sh` that runs a truncated pipeline on a bundled test file
+
+## Phase-Level Error Recovery
+
+Individual phase failures restart the entire phase group. If Phase 6 (linguistic review) fails mid-way through a large file, there's no mechanism to resume from the last reviewed chunk. Consider:
+- Per-phase checkpointing within post-processing (e.g. writing a `phase_N_complete` marker)
+- Allowing `--phase N` to resume within the post-processing group rather than restarting from Phase 3
+
 ## References
 
 - Existing misalignment case: Fawlty Towers / documentary test — cues 102-108, ~00:10:18

@@ -1,8 +1,11 @@
 """
 Shared subtitle constraints — single source of truth.
 
-SKILL.md is the authoritative reference for Claude during translation.
-These constants mirror SKILL.md and are used by all validation/analysis scripts.
+This file is the canonical definition of all constraint values.
+Both Python scripts and shared-constraints.md consume these values.
+
+To regenerate the markdown table in shared-constraints.md:
+    python3 scripts/srt_constants.py --sync
 """
 
 # === Shared constraints (all languages) ===
@@ -113,3 +116,75 @@ def get_constraints(fps, language='nl'):
     if language == 'en':
         return dict(_EN_CONSTRAINTS[bucket])
     return dict(_NL_CONSTRAINTS[bucket])
+
+
+def generate_markdown_table():
+    """Generate the NL constraints markdown table from the canonical dicts."""
+    nl24 = _NL_CONSTRAINTS[24]
+    nl25 = _NL_CONSTRAINTS[25]
+
+    rows = [
+        ('CPS Optimal',          str(nl24['cps_optimal']),      str(nl25['cps_optimal'])),
+        ('CPS Hard Limit',       str(nl24['cps_hard_limit']),   str(nl25['cps_hard_limit'])),
+        ('CPS Emergency Maximum', str(nl24['cps_emergency_max']), str(nl25['cps_emergency_max'])),
+        ('Characters per line',  str(nl24['max_chars_per_line']), str(nl25['max_chars_per_line'])),
+        ('Maximum cue duration', f"{nl24['max_duration_ms']}ms", f"{nl25['max_duration_ms']}ms"),
+        ('Minimum cue duration', f"{nl24['min_duration_ms']}ms", f"{nl25['min_duration_ms']}ms"),
+        ('Minimum cue gap',     f"{nl24['min_gap_ms']}ms (3 frames)", f"{nl25['min_gap_ms']}ms (3 frames)"),
+        ('Max words/min',       str(nl24['max_words_per_min']), str(nl25['max_words_per_min'])),
+        ('Max lines per cue',   str(nl24['max_lines']),         str(nl25['max_lines'])),
+        ('CPS calculation',     'All characters (incl. spaces); `...` counts as 1 char',
+                                'All characters (incl. spaces); `...` counts as 1 char'),
+        ('Merge lines shorter than', f"{nl24['unbreak_threshold']} chars", f"{nl25['unbreak_threshold']} chars"),
+    ]
+
+    lines = ['| Constraint | 23.976 / 24 fps | 25 fps |', '|---|---|---|']
+    for label, v24, v25 in rows:
+        lines.append(f'| {label} | {v24} | {v25} |')
+    return '\n'.join(lines)
+
+
+def sync_constraints_md():
+    """Regenerate the constraints table in shared-constraints.md."""
+    import os
+    md_path = os.path.join(os.path.dirname(__file__), '..', 'base', 'shared-constraints.md')
+    md_path = os.path.normpath(md_path)
+
+    with open(md_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    begin = '<!-- BEGIN GENERATED CONSTRAINTS -->'
+    end = '<!-- END GENERATED CONSTRAINTS -->'
+
+    if begin not in content or end not in content:
+        print(f'ERROR: Marker comments not found in {md_path}')
+        print(f'Expected {begin} and {end}')
+        return False
+
+    before = content[:content.index(begin) + len(begin)]
+    after = content[content.index(end):]
+
+    new_content = before + '\n' + generate_markdown_table() + '\n' + after
+
+    if new_content == content:
+        print('shared-constraints.md is already up to date.')
+        return True
+
+    with open(md_path, 'w', encoding='utf-8') as f:
+        f.write(new_content)
+    print(f'Updated {md_path}')
+    return True
+
+
+if __name__ == '__main__':
+    import sys
+    if '--sync' in sys.argv:
+        success = sync_constraints_md()
+        sys.exit(0 if success else 1)
+    elif '--markdown' in sys.argv:
+        print(generate_markdown_table())
+    else:
+        print('Usage: python3 srt_constants.py [--sync | --markdown]')
+        print('  --sync      Regenerate constraints table in shared-constraints.md')
+        print('  --markdown  Print the constraints table to stdout')
+        sys.exit(1)
