@@ -27,8 +27,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from srt_utils import parse_srt_file, write_srt, visible_length
-from srt_constants import CPS_SOFT_CEILING
+from srt_utils import parse_srt_file, write_srt, visible_length, is_dual_speaker
+from srt_constants import CPS_SOFT_CEILING, MAX_CHARS_PER_LINE
 
 
 # ---------------------------------------------------------------------------
@@ -85,16 +85,12 @@ KEEP_TOGETHER = [
     'Verenigde Staten', 'Verenigd Koninkrijk',
     'Europese Unie', 'Verenigde Naties',
 ]
+KEEP_TOGETHER_LOWER = [p.lower() for p in KEEP_TOGETHER]
 
 
 # ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
-
-def is_dual_speaker(text_lines):
-    """Check if cue has dual speakers (second line starts with -)."""
-    return len(text_lines) == 2 and text_lines[1].lstrip().startswith('-')
-
 
 def check_balance(text_lines):
     """
@@ -105,7 +101,7 @@ def check_balance(text_lines):
         return []
 
     # Skip dual-speaker cues — their line breaks are semantically mandated
-    if is_dual_speaker(text_lines):
+    if is_dual_speaker('\n'.join(text_lines)):
         return []
 
     top = text_lines[0].rstrip()
@@ -168,7 +164,7 @@ def check_balance(text_lines):
     return issues
 
 
-def find_best_break(full_text, max_chars=42):
+def find_best_break(full_text, max_chars=MAX_CHARS_PER_LINE):
     """
     Find the best line break position for a subtitle text.
 
@@ -184,6 +180,7 @@ def find_best_break(full_text, max_chars=42):
         return None
 
     candidates = []
+    full_text_lower = full_text.lower()
 
     # Try every word boundary as a potential break point
     for i in range(1, len(words)):
@@ -233,10 +230,10 @@ def find_best_break(full_text, max_chars=42):
             score -= 10
 
         # Breaking inside a multi-word proper noun is forbidden
-        for phrase in KEEP_TOGETHER:
-            if phrase.lower() in full_text.lower():
+        for phrase_lower in KEEP_TOGETHER_LOWER:
+            if phrase_lower in full_text_lower:
                 # Check if this break point splits the phrase
-                if phrase.lower() not in top.lower() and phrase.lower() not in bot.lower():
+                if phrase_lower not in top.lower() and phrase_lower not in bot.lower():
                     score -= 10
 
         candidates.append((score, top, bot))
@@ -292,9 +289,9 @@ def main():
 
     cues, _errors = parse_srt_file(args.srt_file)
     two_line = [c for c in cues if len(c.text.split('\n')) == 2
-                and not is_dual_speaker(c.text.split('\n'))]
+                and not is_dual_speaker(c.text)]
 
-    max_chars = 42
+    max_chars = MAX_CHARS_PER_LINE
     flagged = []
     fixed = 0
     unbroken = 0
@@ -303,7 +300,7 @@ def main():
 
     for cue in cues:
         text_lines = cue.text.split('\n')
-        if len(text_lines) != 2 or is_dual_speaker(text_lines):
+        if len(text_lines) != 2 or is_dual_speaker(cue.text):
             continue
 
         issues = check_balance(text_lines)

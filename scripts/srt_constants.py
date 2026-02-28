@@ -8,31 +8,7 @@ To regenerate the markdown table in shared-constraints.md:
     python3 scripts/srt_constants.py --sync
 """
 
-# === Shared constraints (all languages) ===
-MAX_LINES = 2
-MAX_CHARS_PER_LINE = 42
-CPS_SOFT_CEILING = 17  # 25fps hard limit (kept for backwards compat)
-MAX_DURATION_MS = 8000
-
-# === Dutch (NL) — Dutch Professional 25fps (flat constants for backwards compat) ===
-NL_CPS_TARGET = 12
-NL_CPS_HARD_LIMIT = 20
-NL_MIN_GAP_MS = 120          # 3 frames at 25fps
-NL_MIN_DURATION_MS = 830
-NL_MAX_WORDS_PER_MIN = 180
-NL_UNBREAK_THRESHOLD = 40    # unbreak subtitles shorter than this
-
-# === English (EN) — Netflix English (USA) Timed Text Style Guide ===
-EN_CPS_TARGET = 15
-EN_CPS_HARD_LIMIT = 20
-EN_MIN_GAP_MS = 125          # 3 frames at 24fps
-EN_MIN_DURATION_MS = 1000
-
-# === CPS reporting thresholds (lenient, for diagnostic use) ===
-CPS_REPORT_HARD_SCRIPTED = 25
-CPS_REPORT_HARD_UNSCRIPTED = 35
-
-# === Framerate-aware constraint dicts ===
+# === Framerate-aware constraint dicts (canonical source) ===
 
 _NL_CONSTRAINTS = {
     24: {
@@ -85,6 +61,30 @@ _EN_CONSTRAINTS = {
         'max_lines': 2,
     },
 }
+
+
+# === Flat constants derived from the dicts above (25fps NL defaults) ===
+# Used by scripts that don't take --fps; overridden at runtime when fps is known.
+MAX_LINES = _NL_CONSTRAINTS[25]['max_lines']
+MAX_CHARS_PER_LINE = _NL_CONSTRAINTS[25]['max_chars_per_line']
+CPS_SOFT_CEILING = _NL_CONSTRAINTS[25]['cps_hard_limit']
+MAX_DURATION_MS = 8000  # lenient default; fps-aware scripts use get_constraints()
+
+NL_CPS_TARGET = _NL_CONSTRAINTS[25]['cps_optimal']
+NL_CPS_HARD_LIMIT = _NL_CONSTRAINTS[25]['cps_emergency_max']
+NL_MIN_GAP_MS = _NL_CONSTRAINTS[25]['min_gap_ms']
+NL_MIN_DURATION_MS = _NL_CONSTRAINTS[25]['min_duration_ms']
+NL_MAX_WORDS_PER_MIN = _NL_CONSTRAINTS[25]['max_words_per_min']
+NL_UNBREAK_THRESHOLD = _NL_CONSTRAINTS[25]['unbreak_threshold']
+
+EN_CPS_TARGET = _EN_CONSTRAINTS[24]['cps_optimal']
+EN_CPS_HARD_LIMIT = _EN_CONSTRAINTS[24]['cps_hard_limit']
+EN_MIN_GAP_MS = _EN_CONSTRAINTS[24]['min_gap_ms']
+EN_MIN_DURATION_MS = _EN_CONSTRAINTS[24]['min_duration_ms']
+
+# === CPS reporting thresholds (lenient, for diagnostic use) ===
+CPS_REPORT_HARD_SCRIPTED = 25
+CPS_REPORT_HARD_UNSCRIPTED = 35
 
 
 def classify_fps(raw_fps) -> int:

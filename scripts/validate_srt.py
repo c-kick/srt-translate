@@ -316,6 +316,15 @@ def fix_srt(file_path: str, output_path: str | None = None) -> dict:
     out_path = output_path or file_path
     write_srt(subtitles, out_path)
     
+    # Collect unfixable cue indices for the --unfixable-indices flag
+    unfixable_indices = sorted({
+        sub.index for sub in subtitles
+        if (sub.duration_seconds > 0 and sub.cps > CPS_HARD_LIMIT)
+        or sub.line_count > MAX_LINES
+        or any(visible_length(re.sub(r'^-\s?', '', line)) > MAX_CHARS_PER_LINE
+               for line in sub.text.split('\n'))
+    })
+
     return {
         'fixed': True,
         'output_file': out_path,
@@ -323,7 +332,8 @@ def fix_srt(file_path: str, output_path: str | None = None) -> dict:
         'fixes_applied': len(all_fixes),
         'fixes': all_fixes,
         'unfixable_count': len(unfixable),
-        'unfixable': unfixable
+        'unfixable': unfixable,
+        'unfixable_indices': unfixable_indices,
     }
 
 
@@ -540,15 +550,10 @@ def main():
         result = fix_srt(str(file_path), args.output)
         
         if args.unfixable_indices:
-            # Extract just the cue indices from unfixable messages
-            indices = []
-            for msg in result.get('unfixable', []):
-                match = re.match(r'Cue (\d+)', msg)
-                if match:
-                    indices.append(int(match.group(1)))
+            indices = result.get('unfixable_indices', [])
             print(json.dumps({
-                'unfixable_cue_indices': sorted(set(indices)),
-                'count': len(set(indices)),
+                'unfixable_cue_indices': indices,
+                'count': len(indices),
                 'requires_retranslation': len(indices) > 0
             }, indent=2))
         else:

@@ -19,27 +19,13 @@ Usage:
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from srt_utils import parse_srt_file, write_srt, Subtitle, visible_length
-
-
-def is_dual_speaker(text: str) -> bool:
-    """Check if cue already contains two speakers (has dash on second line)."""
-    lines = text.split('\n')
-    if len(lines) >= 2:
-        # Second line starts with '-' = dual speaker
-        if lines[1].strip().startswith('-'):
-            return True
-    # Single line with ' - ' mid-line (inline dual speaker)
-    if len(lines) == 1 and re.search(r'\s+-\s+', text):
-        return True
-    return False
+from srt_utils import parse_srt_file, write_srt, Subtitle, visible_length, is_dual_speaker
 
 
 def detect_merge_marker(text: str) -> tuple[str, str]:

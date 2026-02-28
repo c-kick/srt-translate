@@ -18,7 +18,7 @@ from typing import List, Tuple, Optional
 
 # Add script directory to path for srt_utils import
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from srt_utils import Subtitle, parse_srt_file
+from srt_utils import Subtitle, parse_srt_file, is_dual_speaker
 
 
 @dataclass
@@ -170,9 +170,8 @@ def align_cues(en_subs: List[Subtitle], nl_subs: List[Subtitle],
 
 
 def detect_dual_speaker(text: str) -> bool:
-    """Check if a cue contains dual-speaker formatting."""
-    lines = text.split('\n')
-    return len(lines) == 2 and lines[1].startswith('-')
+    """Deprecated: use is_dual_speaker from srt_utils instead."""
+    return is_dual_speaker(text)
 
 
 def detect_idiom_candidate(en_text: str, nl_text: str) -> bool:

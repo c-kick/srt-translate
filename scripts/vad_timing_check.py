@@ -26,6 +26,7 @@ Examples:
         --aggressiveness 3
 """
 import argparse
+import bisect
 import hashlib
 import json
 import os
@@ -168,14 +169,23 @@ def find_transitions(speech_map, frame_ms=30):
 
 
 def find_nearest(transitions, target_ms, search_range=2000):
-    """Find the transition nearest to target_ms within search_range."""
+    """Find the transition nearest to target_ms within search_range.
+
+    Uses binary search (transitions must be sorted, which they are from
+    find_transitions).
+    """
+    if not transitions:
+        return None
+    idx = bisect.bisect_left(transitions, target_ms)
     best = None
     best_dist = float('inf')
-    for t in transitions:
-        dist = abs(t - target_ms)
-        if dist < best_dist and dist <= search_range:
-            best_dist = dist
-            best = t
+    # Check the two candidates around the insertion point
+    for i in (idx - 1, idx):
+        if 0 <= i < len(transitions):
+            dist = abs(transitions[i] - target_ms)
+            if dist < best_dist and dist <= search_range:
+                best_dist = dist
+                best = transitions[i]
     return best
 
 
@@ -185,18 +195,8 @@ def find_nearest(transitions, target_ms, search_range=2000):
 
 def match_source_cues(nl_cues, en_cues, tolerance_ms=500):
     """For each NL cue, find matching EN source cue(s) by start time."""
-    matches = {}
-    for nl in nl_cues:
-        matched = []
-        for en in en_cues:
-            if nl.start_ms - tolerance_ms <= en.start_ms <= nl.end_ms + tolerance_ms:
-                matched.append(en)
-        if not matched and en_cues:
-            best = min(en_cues, key=lambda e: abs(e.start_ms - nl.start_ms))
-            if abs(best.start_ms - nl.start_ms) <= tolerance_ms:
-                matched = [best]
-        matches[nl.index] = matched
-    return matches
+    return {nl.index: _match_by_proximity(nl, en_cues, tolerance_ms)
+            for nl in nl_cues}
 
 
 # ---------------------------------------------------------------------------

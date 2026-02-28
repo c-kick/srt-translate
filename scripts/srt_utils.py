@@ -64,6 +64,16 @@ class Subtitle:
         return f"{self.index}\r\n{ms_to_timecode(self.start_ms)} --> {ms_to_timecode(self.end_ms)}\r\n{text_crlf}\r\n"
 
 
+def is_dual_speaker(text: str) -> bool:
+    """Check if cue contains two speakers (dash on second line, or inline ' - ')."""
+    lines = text.split('\n')
+    if len(lines) >= 2 and lines[1].lstrip().startswith('-'):
+        return True
+    if len(lines) == 1 and re.search(r'\s+-\s+', text):
+        return True
+    return False
+
+
 def timecode_to_ms(tc: str) -> int:
     """Convert SRT timecode (HH:MM:SS,mmm) to milliseconds."""
     # Handle both comma and period separators
@@ -169,62 +179,52 @@ def parse_srt(content: str) -> Tuple[List[Subtitle], List[str]]:
 def parse_srt_file(file_path: str, encoding: str = None) -> Tuple[List[Subtitle], List[str]]:
     """
     Parse SRT file into list of Subtitle objects.
-    
+
     Args:
         file_path: Path to the SRT file
         encoding: Optional encoding. If None, attempts UTF-8 first, then falls back to detection.
-    
+
     Returns:
         Tuple of (subtitles, parse_errors)
     """
+    # Read raw bytes once, then try encodings in memory
+    with open(file_path, 'rb') as f:
+        raw = f.read()
+
     content = None
-    detected_encoding = encoding
-    
-    # Try specified encoding or UTF-8 first
     encodings_to_try = [encoding] if encoding else ['utf-8', 'utf-8-sig']
-    
+
     for enc in encodings_to_try:
         if enc is None:
             continue
         try:
-            with open(file_path, 'r', encoding=enc) as f:
-                content = f.read()
-            detected_encoding = enc
+            content = raw.decode(enc)
             break
         except (UnicodeDecodeError, LookupError):
             continue
-    
+
     # If still no content, try to detect encoding
     if content is None:
         try:
             import chardet
-            with open(file_path, 'rb') as f:
-                raw = f.read()
             detection = chardet.detect(raw)
-            detected_encoding = detection.get('encoding', 'utf-8')
+            detected_enc = detection.get('encoding', 'utf-8')
             try:
-                content = raw.decode(detected_encoding)
+                content = raw.decode(detected_enc)
             except (UnicodeDecodeError, LookupError):
-                # Last resort: decode with replacement
                 content = raw.decode('utf-8', errors='replace')
-                detected_encoding = 'utf-8 (with replacements)'
         except ImportError:
             # chardet not available, try common encodings
             for enc in ['iso-8859-1', 'windows-1252', 'cp1252']:
                 try:
-                    with open(file_path, 'r', encoding=enc) as f:
-                        content = f.read()
-                    detected_encoding = enc
+                    content = raw.decode(enc)
                     break
-                except UnicodeDecodeError:
+                except (UnicodeDecodeError, LookupError):
                     continue
-            
+
             if content is None:
-                # Absolute last resort
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                    content = f.read()
-                detected_encoding = 'utf-8 (with replacements)'
-    
+                content = raw.decode('utf-8', errors='replace')
+
     return parse_srt(content)
 
 
