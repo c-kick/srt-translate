@@ -10,6 +10,7 @@ __pycache__/
 
 # Runtime artifacts
 *.json
+!evals/evals.json
 draft*.srt
 merged*.srt
 batch_*.srt

@@ -1,0 +1,28 @@
+{
+  "skill_name": "srt-translate",
+  "evals": [
+    {
+      "id": 1,
+      "name": "comprehensive-translation",
+      "prompt": "Translate the comprehensive English test file into Dutch, following all srt-translate skill instructions. Comedy genre, 25fps. Basil and Sybil Fawlty are married (always je/jij). Cues 1-60 are Fawlty Towers, cues 61-66 are from a documentary (The Pigeon Tunnel), cues 67-81 are Fawlty Towers again. The documentary cues contain SDH and italic song lyrics.",
+      "expected_output": "[SC] markers at every speaker change. je/jij between Basil/Sybil (never u). SDH-only cues (1, 61, 66) removed. Speaker labels (65) stripped, text kept. Italic song cues (62-64) translated with italic tags preserved. Continuation cues use ... not trailing commas. No exclamation marks in output.",
+      "files": ["evals/test_comprehensive.en.srt"]
+    },
+    {
+      "id": 2,
+      "name": "comprehensive-merge",
+      "prompt": "Run the merge script (auto_merge_cues.py) on the translation output from test 1 with comedy parameters (--gap-threshold 800 --max-duration 6000). Verify merge ratio is 55-70%, dual-speaker cues have proper dash formatting, and no same-speaker rewrap collapsed dual-speaker lines.",
+      "expected_output": "Merge ratio 55-70%. All [SC] cues become dash-formatted dual-speaker lines. Same-speaker continuations merged. No dual-speaker cues collapsed into single-speaker.",
+      "files": [],
+      "depends_on": 1
+    },
+    {
+      "id": 3,
+      "name": "comprehensive-validation",
+      "prompt": "Run validate_srt.py on the merged output. Check for CPS violations, line-length violations, gap issues, and empty cues. All hard errors should be zero.",
+      "expected_output": "Zero hard errors. CPS warnings acceptable for fast comedy dialogue. No line-length violations (all ≤42 chars). No empty cues.",
+      "files": [],
+      "depends_on": 2
+    }
+  ]
+}
