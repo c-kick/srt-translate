@@ -40,7 +40,7 @@ The orchestrator invokes Claude in headless mode per phase group, each with a fr
 | Group | Phases | Claude context loaded |
 |-------|--------|----------------------|
 | Setup | 0a, 0, 1 | shared-constraints + workflow-setup |
-| Translation | 2 | shared-constraints + workflow-translate + translator + exemplars |
+| Translation | 2 | shared-constraints + workflow-translate + translator + `references/exemplars/*` |
 | Post-processing | 3-9, LOG | shared-constraints + workflow-post + common-errors |
 
 Each group runs in a separate Claude invocation = fresh context, zero attention debt.

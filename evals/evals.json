@@ -23,6 +23,52 @@
       "expected_output": "Zero hard errors. CPS warnings acceptable for fast comedy dialogue. No line-length violations (all ≤42 chars). No empty cues.",
       "files": [],
       "depends_on": 2
+    },
+    {
+      "id": 4,
+      "name": "documentary-translation",
+      "prompt": "Translate the documentary English test file into Dutch, following all srt-translate skill instructions. Documentary genre, 25fps. Contains WWII narration (The World At War), interview segments, SDH cues (1, 26, 31), a speaker label (26), and nature documentary narration (Planet Earth). Narrator uses formal register. Interview speaker uses informal register.",
+      "expected_output": "[SC] markers at every speaker change. SDH-only cues (1, 31) removed. Speaker label (26) stripped, text kept. Narration uses formal, complete sentences. Interview segments preserve speaker rhythm with cleaned filler ('you see', 'really, true' removed). Military terminology correct (para's, tanks). Statistics use Dutch formatting (176.000, not 176,000). Dates use Dutch format (10 mei 1940). No exclamation marks. Continuation cues (2→3→4, 5→6, 7→8, 10→11, 13→14→15, 16→17→18, 19→20→21, 22→23→24, 27→28→29→30) properly handled.",
+      "files": ["evals/test_documentary.en.srt"]
+    },
+    {
+      "id": 5,
+      "name": "documentary-merge",
+      "prompt": "Run the merge script (auto_merge_cues.py) on the documentary translation output from test 4 with documentary parameters (--gap-threshold 1000 --max-duration 7000). Verify merge ratio is 70-85%, dual-speaker cues have proper dash formatting.",
+      "expected_output": "Merge ratio 70-85%. Multi-cue continuations merged. Dual-speaker cues (if any) have correct dash formatting. No same-speaker dual-speaker collapse.",
+      "files": [],
+      "depends_on": 4
+    },
+    {
+      "id": 6,
+      "name": "documentary-validation",
+      "prompt": "Run validate_srt.py on the documentary merged output. Check for CPS violations, line-length violations, gap issues, and empty cues. All hard errors should be zero.",
+      "expected_output": "Zero hard errors. No line-length violations (all ≤42 chars). No empty cues. CPS within documentary norms.",
+      "files": [],
+      "depends_on": 5
+    },
+    {
+      "id": 7,
+      "name": "drama-translation",
+      "prompt": "Translate the drama English test file into Dutch, following all srt-translate skill instructions. Drama genre, 24fps. Characters: Stevens (butler, formal, uses u), Miss Kenton (direct, emotionally honest), Lord Darlington (employer), Mr. Benn (working class, shifts from u to je with Sarah). Track T-V register per relationship. Contains rapid multi-speaker exchanges (cues 4-16), emotional scenes without exclamation marks (23-27), and register shifts (28-29).",
+      "expected_output": "[SC] markers at every speaker change. Stevens uses u with Lord Darlington and Miss Kenton. Mr. Benn shifts to je/jij with Sarah (cues 28-29). No exclamation marks (cue 23 'damn it!' → no '.'). Period-appropriate vocabulary (sous-butler, provisiekamer). Dual-speaker cues (4, 28) preserved with dash formatting. Rapid exchanges (9-16) translated with proper speaker tracking. Idioms adapted: 'not turning a hair' → 'zonder een spier te vertrekken' or equivalent. Continuation cues (1→2→3, 5→6→7→8, 21→22, 24→25, 26→27) properly handled.",
+      "files": ["evals/test_drama.en.srt"]
+    },
+    {
+      "id": 8,
+      "name": "drama-merge",
+      "prompt": "Run the merge script (auto_merge_cues.py) on the drama translation output from test 7 with drama parameters (--gap-threshold 1000 --max-duration 7000). Verify merge ratio is 60-75%, dual-speaker cues have proper dash formatting.",
+      "expected_output": "Merge ratio 60-75%. [SC] cues become dash-formatted dual-speaker lines. Same-speaker continuations merged. No dual-speaker cues collapsed into single-speaker. Rapid exchange sequence preserved correctly.",
+      "files": [],
+      "depends_on": 7
+    },
+    {
+      "id": 9,
+      "name": "drama-validation",
+      "prompt": "Run validate_srt.py on the drama merged output. Check for CPS violations, line-length violations, gap issues, and empty cues. All hard errors should be zero.",
+      "expected_output": "Zero hard errors. No line-length violations (all ≤42 chars). No empty cues. CPS within drama norms.",
+      "files": [],
+      "depends_on": 8
     }
   ]
 }

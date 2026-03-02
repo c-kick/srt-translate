@@ -454,8 +454,8 @@ class TestAutoMergeCuesReport(unittest.TestCase):
             make_cue(3, 10000, 12000, "Third cue"),  # 5000ms gap — no merge
         ]
 
-        merged, report = merge_cues(cues, gap_threshold_ms=1000,
-                                     max_duration_ms=7000)
+        merged, report, _ = merge_cues(cues, gap_threshold_ms=1000,
+                                      max_duration_ms=7000)
 
         # Cues 1+2 should merge, cue 3 stays separate
         self.assertEqual(len(merged), 2)

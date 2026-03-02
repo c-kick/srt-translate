@@ -190,7 +190,7 @@ def merge_cues(
         Tuple of (merged_subtitles, merge_report)
     """
     if not subtitles:
-        return [], []
+        return [], [], 0
 
     trivial_dropped = 0
     merged = []

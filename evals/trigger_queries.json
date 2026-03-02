@@ -1,0 +1,126 @@
+{
+  "skill_name": "srt-translate",
+  "description": "Trigger evaluation queries for description optimization. 10 should-trigger, 10 should-not-trigger.",
+  "queries": [
+    {
+      "id": 1,
+      "query": "Vertaal deze Engelse ondertitels naar het Nederlands",
+      "should_trigger": true,
+      "reason": "Direct Dutch request for EN→NL subtitle translation"
+    },
+    {
+      "id": 2,
+      "query": "I need to translate this SRT file from English to Dutch",
+      "should_trigger": true,
+      "reason": "EN→NL SRT translation request"
+    },
+    {
+      "id": 3,
+      "query": "Can you review my Dutch subtitles against the English source?",
+      "should_trigger": true,
+      "reason": "NL subtitle review against EN source"
+    },
+    {
+      "id": 4,
+      "query": "Controleer deze Nederlandse ondertitels op kwaliteit",
+      "should_trigger": true,
+      "reason": "Dutch subtitle quality check"
+    },
+    {
+      "id": 5,
+      "query": "Help me localize these English subtitles for Dutch viewers",
+      "should_trigger": true,
+      "reason": "SRT localization for Dutch audience"
+    },
+    {
+      "id": 6,
+      "query": "Translate this movie's subtitles to Dutch, it's a documentary about WWII",
+      "should_trigger": true,
+      "reason": "Genre-specific EN→NL subtitle translation"
+    },
+    {
+      "id": 7,
+      "query": "Fix the CPS violations in my Dutch subtitle file",
+      "should_trigger": true,
+      "reason": "Subtitle QC task within the pipeline"
+    },
+    {
+      "id": 8,
+      "query": "Merge the adjacent cues in my NL subtitles",
+      "should_trigger": true,
+      "reason": "Post-processing merge step"
+    },
+    {
+      "id": 9,
+      "query": "I have an .srt file in English, translate it to Nederlands",
+      "should_trigger": true,
+      "reason": "Explicit EN SRT → NL translation"
+    },
+    {
+      "id": 10,
+      "query": "Review de timing en grammatica van deze ondertitels",
+      "should_trigger": true,
+      "reason": "NL subtitle timing and grammar review"
+    },
+    {
+      "id": 11,
+      "query": "Translate this document from English to Dutch",
+      "should_trigger": false,
+      "reason": "General document translation, not SRT subtitle"
+    },
+    {
+      "id": 12,
+      "query": "Can you transcribe the audio from this video?",
+      "should_trigger": false,
+      "reason": "Audio transcription, not subtitle translation"
+    },
+    {
+      "id": 13,
+      "query": "Translate these subtitles from English to French",
+      "should_trigger": false,
+      "reason": "Wrong target language (French, not Dutch)"
+    },
+    {
+      "id": 14,
+      "query": "Help me OCR these burned-in subtitles",
+      "should_trigger": false,
+      "reason": "Subtitle OCR extraction, not translation"
+    },
+    {
+      "id": 15,
+      "query": "Clean up the formatting of this English SRT file",
+      "should_trigger": false,
+      "reason": "English-only SRT standardization (srt-standardize-en territory)"
+    },
+    {
+      "id": 16,
+      "query": "Translate this email from Dutch to English",
+      "should_trigger": false,
+      "reason": "Wrong direction (NL→EN) and not subtitles"
+    },
+    {
+      "id": 17,
+      "query": "Generate subtitles for this YouTube video",
+      "should_trigger": false,
+      "reason": "Subtitle generation from scratch, not translation"
+    },
+    {
+      "id": 18,
+      "query": "Translate these Spanish subtitles to German",
+      "should_trigger": false,
+      "reason": "Wrong source and target languages entirely"
+    },
+    {
+      "id": 19,
+      "query": "Fix the timing sync of these English subtitles to match the video",
+      "should_trigger": false,
+      "reason": "English subtitle sync only, no Dutch translation"
+    },
+    {
+      "id": 20,
+      "query": "Can you write a Python script to parse SRT files?",
+      "should_trigger": false,
+      "reason": "General programming request about SRT format, not translation"
+    }
+  ]
+}
