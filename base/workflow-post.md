@@ -176,10 +176,14 @@ Also load `merge_report.json` to know which cues were merged.
 - je/u consistent per character relationship? (See `dutch-patterns.md` for rules — spouses/family/friends are ALWAYS je, never u)
 - Register appropriate for speaker and context?
 
-**Merged cues** (from `merge_report.json`) — additionally:
-- Grammar correct after text combination?
-- Sentence flows naturally (no orphaned fragments)?
-- No awkward joins — rewrite as natural sentence if needed
+**Merged cues** (from `merge_report.json`) — these are the highest-priority items. The merge script joins text mechanically (strips `...`, joins with space). Claude must verify every merge boundary reads as correct Dutch:
+
+1. **Capitalization at join point:** If the merged text has an uppercase letter mid-sentence (from cue-initial capitalization), lowercase it. Example: `het blauwe In de la` → `het blauwe in de la`.
+2. **Missing punctuation at join point:** If two clauses were joined without proper punctuation, add it. Example: `Ik ben alleen Duitsers komen morgen` → `Ik ben alleen, de Duitsers komen morgen` (comma + article).
+3. **Orphaned fragments:** If a merged cue ends with a fragment that doesn't flow (`De soldaten marcheerden. Naar het front.`), rewrite as one sentence (`De soldaten marcheerden naar het front.`).
+4. **Parallel constructions:** If merged rhetorical questions or lists lost their separators, add commas. Example: `Groeit die nog steeds woekert die zich naar het bot` → `Groeit die nog steeds, woekert die zich naar het bot`.
+
+Read `merge_report.json`, find every `output_index` with `source_count > 1`, and verify the merged text at that cue number.
 
 ### Fix Rules
 

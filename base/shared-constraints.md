@@ -92,6 +92,7 @@ When songs ARE translated: lowercase start, no end period, commas and question m
 ## Continuity
 
 - `...` (three dots) for ellipses at **end** of continuation cues (trailing dots)
+- **Continuation cue starts lowercase** — the next cue continues mid-sentence, so it must not start with a capital letter (unless proper noun). The merge script strips `...` and joins with a space.
 - Leading `...` ("inpunten") allowed when speaker genuinely enters mid-sentence (e.g., `...halverwege een zin`)
 - **Never end a continuation cue with a comma** — use `...` instead
 - Two hyphens `--` for abrupt interruption; ellipses for trail-off
