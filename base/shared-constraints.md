@@ -115,6 +115,33 @@ When songs ARE translated: lowercase start, no end period, commas and question m
 
 Do NOT guess. Read the source dashes and sentence context.
 
+### Speaker continuity after dual-speaker cues
+
+When a dual-speaker cue is followed by a single-speaker cue, you must determine WHO is speaking in the next cue. The terminal punctuation of the **last speaker** (speaker B) in the dual-speaker cue tells you:
+
+1. **Speaker B ends with `.` `!` `?`** (complete sentence) → next cue's speaker is **ambiguous**. It could be A, B, or even a new speaker C. Mark `[SC]` unless context makes the speaker obvious.
+   ```
+   Cue 1: Speaker A.        ← complete
+          -Speaker B.        ← complete
+   Cue 2: ???                ← could be A, B, or C — cannot merge
+   ```
+
+2. **Speaker B ends with `...`** (ellipsis = explicit continuation) → next cue is **definitely speaker B**. Safe to merge (no `[SC]`).
+   ```
+   Cue 1: Speaker A?         ← complete
+          -Speaker B...       ← continues
+   Cue 2: Speaker B continued ← same speaker — can merge
+   ```
+
+3. **Speaker B has no terminal punctuation** (no period, no ellipsis) → next cue is **likely speaker B** (implicit continuation). Safe to merge (no `[SC]`).
+   ```
+   Cue 1: Speaker A?         ← complete
+          -Speaker B          ← no period = continues
+   Cue 2: Speaker B continued ← same speaker — can merge
+   ```
+
+The same logic applies to speaker A: if speaker A's line is incomplete and the next cue has no dashes, it may be A continuing. But since A appears on line 1 and B on line 2, B's continuation into the next cue is far more common.
+
 ### Genre defaults for [SC]
 
 - **Comedy / fast-unscripted:** Assume speaker change unless clearly the same speaker. In rapid-fire dialogue, MOST cues change speaker. When in doubt, mark `[SC]`.
