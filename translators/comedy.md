@@ -136,6 +136,16 @@ Keep short:
 - Contractions: m'n and z'n only (see dutch-patterns.md)
 - Informal register unless character is formal
 
+### Speaker Change Markers — Comedy Priority
+
+Comedy has rapid speaker exchanges. **Mark `[SC]` on every cue where the speaker differs from the previous cue.** When in doubt, mark `[SC]` — a missed `[SC]` merges two speakers into one unreadable cue; an extra `[SC]` merely prevents one merge.
+
+Common comedy patterns that MUST have `[SC]`:
+- Quick back-and-forth banter between characters
+- Interruptions and overlapping dialogue
+- One character answering another's question
+- A character reacting to what someone else just said
+
 ---
 
 ## Gold-Standard Exemplars

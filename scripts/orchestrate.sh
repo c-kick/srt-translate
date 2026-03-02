@@ -41,6 +41,7 @@ FRESH=false
 START_PHASE=""
 SPEECH_SYNC=false
 KEEP_SDH=false
+KEEP_WORK=false
 MAX_BATCHES=0  # 0 = unlimited
 VIDEO_FILE=""
 
@@ -51,6 +52,7 @@ while [[ $# -gt 0 ]]; do
         --phase)        START_PHASE="$2"; shift 2 ;;
         --speech-sync)  SPEECH_SYNC=true; shift ;;
         --keep-sdh)     KEEP_SDH=true; shift ;;
+        --keep-work)    KEEP_WORK=true; shift ;;
         --max-batches)  MAX_BATCHES="$2"; shift 2 ;;
         --help|-h)
             echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--phase N] [--speech-sync] [--keep-sdh] [--max-batches N]"
@@ -61,6 +63,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --phase N       Start from phase N (0, 2, 3)"
             echo "  --speech-sync   Run Phase 10 (speech sync) after Phase 9"
             echo "  --keep-sdh      Keep SDH cues (default: remove them before translation)"
+            echo "  --keep-work     Preserve work directory after successful completion (for debugging)"
             echo "  --max-batches N Limit translation to N batches (for testing)"
             exit 0
             ;;
@@ -652,8 +655,12 @@ main() {
 
     if $output_is_fresh && [[ "$output_cues" -gt 0 ]]; then
         # Post-processing succeeded
-        log "Cleaning up temp files..."
-        rm -rf "$WORK_DIR"
+        if $KEEP_WORK; then
+            log "Work directory preserved (--keep-work): ${WORK_DIR}"
+        else
+            log "Cleaning up temp files..."
+            rm -rf "$WORK_DIR"
+        fi
         log ""
         log "═══ Pipeline complete ═══"
         log "Output: ${OUTPUT_SRT} (${output_cues} cues)"

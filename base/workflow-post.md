@@ -31,6 +31,8 @@ Fix before merge:
 - Gap violations (< minimum gap, framerate-dependent)
 - 3+ line cues (restructure to 2 lines max)
 
+**Line length fix for dual-speaker cues:** If a dual-speaker cue has a line exceeding 42 characters and the other line is a trivial reply (`-Ja.`, `-Nee.`, `-Goed.`, `-Oké.`, etc.), drop the trivial reply and reflow the remaining text across two lines. The viewer hears the trivial reply — removing it frees both lines for the sentence that needs the space.
+
 **Do NOT fix:** CPS violations. Merging extends durations and lowers CPS naturally.
 
 ---
@@ -62,6 +64,28 @@ source_count=$(grep -c '^[0-9]' source.en.srt)
 merged_count=$(grep -c '^[0-9]' merged.nl.srt)
 echo "Ratio: $((merged_count * 100 / source_count))%"
 ```
+
+### Post-merge verification: dual-speaker count
+
+Count dual-speaker cues (those with `\n-` pattern) in the merged output:
+
+```bash
+python3 -c "
+with open('merged.nl.srt') as f: content = f.read()
+import re
+blocks = re.split(r'\n\n+', content.strip())
+dual = sum(1 for b in blocks if '\n-' in b)
+total = len([b for b in blocks if re.search(r'\d+:\d+', b)])
+print(f'Dual-speaker cues: {dual} / {total} ({dual*100//max(total,1)}%)')
+"
+```
+
+**Expected ranges by genre:**
+- Comedy / fast-unscripted: 15-40% of merged cues should be dual-speaker
+- Drama: 10-25%
+- Documentary: 0-10%
+
+If dual-speaker count is **below the expected range**, the translator likely missed `[SC]` markers. Flag this in the log as a quality warning — the issue originates in Phase 2 and cannot be fully corrected in post-processing.
 
 ---
 
@@ -105,11 +129,14 @@ After extending all end times, some cues will still exceed the CPS hard limit (f
 - **CPS > 20:** must condense (emergency — meaning loss acceptable)
 
 **Condensation priority order** (try each before the next):
-1. **Targeted re-merge** — if adjacent (gap ≤1000ms) and combined fits constraints, merge
-2. **Delete filler** → compress phrases → rephrase
-3. Only accept CPS 17-20 when proper nouns/terminology genuinely cannot be cut further
+1. **Drop trivial replies** — if a dual-speaker cue's second line is a trivial acknowledgment (`Ja.`, `Nee.`, `Oké.`, `Goed.`, `Precies.`, `Klopt.`, etc.), drop the second line and convert to single-speaker. The viewer hears these — subtitling them adds characters without information. This is the cheapest CPS reduction.
+2. **Targeted re-merge** — if adjacent (gap ≤1000ms) and combined fits constraints, merge
+3. **Delete filler** → compress phrases → rephrase
+4. Only accept CPS 17-20 when proper nouns/terminology genuinely cannot be cut further
 
 **Condensation quality rule:** Never replace common words with uncommon synonyms to save characters. Always use natural, everyday Dutch.
+
+**Dual-speaker preservation:** When condensing a cue that has dual-speaker dash formatting (`\n-`), the condensed text MUST keep the dash format. Never collapse two speakers onto one line.
 
 ---
 
@@ -146,7 +173,7 @@ Also load `merge_report.json` to know which cues were merged.
 - No semicolons or exclamation marks?
 
 **Register:**
-- je/u consistent per character relationship?
+- je/u consistent per character relationship? (See `dutch-patterns.md` for rules — spouses/family/friends are ALWAYS je, never u)
 - Register appropriate for speaker and context?
 
 **Merged cues** (from `merge_report.json`) — additionally:
@@ -158,6 +185,7 @@ Also load `merge_report.json` to know which cues were merged.
 
 - **Edit text only.** Do NOT touch timecodes.
 - Do NOT change merge decisions or cue count.
+- **Preserve dual-speaker formatting:** If a cue has dash formatting (`\n-`), any rewrite MUST keep the two-speaker structure with the dash. Never merge two speakers' text into flowing prose.
 - Apply fixes in batch (collect all issues in a chunk, fix together).
 - Reference `references/common-errors.md` for known patterns.
 
@@ -201,7 +229,9 @@ python3 scripts/check_line_balance.py "${VIDEO_BASENAME}.nl.srt" --fix
 | Top-heavy | `"Dit was het economische wonder"\n"van de nazi's."` | Top >> bottom |
 | Bad break | `"...beperkte de"\n"Duitse landmacht..."` | Splits article + noun |
 
-**Grammar-aware rebalancing:** Applies line break priority from shared-constraints.md: sentence boundaries first, then comma+conjunction breaks, then bottom-heavy pyramid, then semantic unit coherence on line 2. Never breaks article+noun, verb+negation, demonstrative+noun. Collapses to single line when total ≤42 chars.
+**Grammar-aware rebalancing:** Applies line break priority from shared-constraints.md: sentence boundaries first, then comma+conjunction breaks, then bottom-heavy pyramid, then semantic unit coherence on line 2. Never breaks article+noun, verb+negation, demonstrative+noun. Collapses to single line when total ≤42 chars. **Dual-speaker cues (with `\n-`) are automatically skipped by the script** — their line breaks are semantically mandated.
+
+**Manual check after auto-fix:** Review any dual-speaker cues where one line exceeds 42 chars. If the other line is a trivial reply (`-Ja.`, `-Nee.`, `-Goed.`, etc.), drop the trivial reply and reflow the remaining text across two lines — this is often the only way to fix an over-length line in a dual-speaker cue without condensing the main content.
 
 **CPS guard:** Skips rebalancing if result would push CPS over 17.
 

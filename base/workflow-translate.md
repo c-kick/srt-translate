@@ -22,6 +22,8 @@
 
 Before translating any cue, read forward to the end of the current sentence. English sentences frequently span 2–4 cues (appositive fragments, delayed subjects, etc.). You need the complete syntactic structure before distributing Dutch across cue positions.
 
+**Also scan for speaker changes.** Source cues with dash markers (`- Line A / - Line B`) contain two speakers. Use these dashes to determine where to place `[SC]` markers in your output — see shared-constraints.md "How to detect speaker changes".
+
 ```
 EN 20: "At the heart of this German war machine,"
 EN 21: "a symbol of a powerful, organized and invincible nation,"
@@ -159,8 +161,13 @@ After each batch, write to `$BATCH_CONTEXT_DIR/batch{N}_context.md`:
 ## Terminology
 ## Register (T-V per speaker)
 ## Recurring Phrases
+## Speaker Changes
+- [SC] markers placed: N (list cue numbers with brief reason, e.g. "cue 45: Basil→Sybil")
+- Last speaker at batch end: [character name]
 ## Notes
 ```
+
+The **Speaker Changes** section is critical for batch continuity — the next batch must know who was speaking at the end of the previous batch to correctly place `[SC]` on its first cue.
 
 ### Post-batch validation
 

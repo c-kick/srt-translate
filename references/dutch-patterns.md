@@ -156,15 +156,41 @@ Use contractions sparingly. Only two are standard in subtitles:
 
 ## Register Guidance (je/u)
 
-| Context | Register | Example |
-|---------|----------|---------|
-| Casual dialogue | je/jij | "Heb je dat gezien?" |
-| Formal settings | u/uw | "Hebt u dat gezien?" |
-| Child to parent | je (usually) | Context-dependent |
-| Employee to boss | Varies by scene | Match source register |
-| Strangers | Often u initially | May shift to je |
+### Core rule: je is the default
 
-**Maintain T-V consistency** per character relationship throughout.
+Dutch subtitling uses *je/jij* unless there is a clear reason for *u*. When in doubt, use *je*.
+
+### Always je/jij:
+
+| Relationship | Reason |
+|-------------|--------|
+| Spouses, partners | Intimate relationship — NEVER u |
+| Family members (siblings, parent↔child) | Family bond |
+| Close friends | Familiar relationship |
+| Colleagues at same level | Peer relationship |
+| Staff among themselves | Informal workplace |
+| Boss → employee | Downward hierarchy |
+| Adult → child | Age difference (downward) |
+
+### Always u/uw:
+
+| Relationship | Reason |
+|-------------|--------|
+| Service provider → customer/guest | Professional courtesy |
+| Employee → unfamiliar superior | Upward hierarchy |
+| Strangers in formal setting | Social distance |
+| Addressing elderly (by younger stranger) | Respect |
+| Professional titles (doctor, lawyer) | Formal role |
+
+### Context-dependent:
+
+| Relationship | Guidance |
+|-------------|----------|
+| Employee → familiar boss | Match source register — may be je if relationship is informal |
+| Strangers in casual setting | Often starts u, may shift to je |
+| Child → parent | Usually je in modern Dutch; u only if period piece or very formal family |
+
+**Maintain T-V consistency** per character relationship throughout. Record every T-V decision in the batch context so it carries across batches.
 
 ---
 

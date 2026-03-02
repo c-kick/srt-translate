@@ -27,6 +27,24 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from srt_utils import parse_srt_file, write_srt, Subtitle, visible_length, is_dual_speaker
 
+# Single-word acknowledgments that are audible and add no information as subtitles.
+# Only dropped when they form a COMPLETE cue (not part of a longer sentence).
+TRIVIAL_REPLIES = {
+    'ja', 'nee', 'oké', 'goed', 'sorry', 'pardon', 'dank je', 'dank u',
+    'bedankt', 'precies', 'inderdaad', 'natuurlijk', 'absoluut', 'zeker',
+    'juist', 'klopt', 'prima', 'top', 'mooi', 'fijn',
+}
+
+
+def is_trivial_reply(text: str) -> bool:
+    """Check if text is a trivial single-word/phrase acknowledgment.
+
+    Only matches complete cues, not fragments of longer text.
+    Strips trailing punctuation before matching.
+    """
+    cleaned = text.strip().rstrip('.?').strip().lower()
+    return cleaned in TRIVIAL_REPLIES
+
 
 def detect_merge_marker(text: str) -> tuple[str, str]:
     """
@@ -174,6 +192,7 @@ def merge_cues(
     if not subtitles:
         return [], []
 
+    trivial_dropped = 0
     merged = []
     report = []
 
@@ -296,7 +315,7 @@ def merge_cues(
         new_index += 1
         i = j if len(merge_candidates) > 1 else i + 1
 
-    return merged, report
+    return merged, report, trivial_dropped
 
 
 def main():
@@ -333,7 +352,7 @@ def main():
     source_count = len(subtitles)
 
     # Merge cues
-    merged, report = merge_cues(
+    merged, report, trivial_dropped = merge_cues(
         subtitles,
         args.gap_threshold,
         args.max_duration,
@@ -369,6 +388,7 @@ def main():
                 "source_cues": source_count,
                 "output_cues": output_count,
                 "merges_performed": merge_count,
+                "trivial_replies_dropped": trivial_dropped,
                 "cues_merged": sum(m["source_count"] for m in report),
                 "ratio_percent": round(ratio, 1)
             },
@@ -383,6 +403,8 @@ def main():
         print(f"Source cues: {source_count}", file=sys.stderr)
         print(f"Output cues: {output_count}", file=sys.stderr)
         print(f"Merges performed: {merge_count}", file=sys.stderr)
+        if trivial_dropped:
+            print(f"Trivial replies dropped: {trivial_dropped}", file=sys.stderr)
         print(f"Ratio: {ratio:.1f}%", file=sys.stderr)
 
     # Return summary as JSON to stdout if no output file specified

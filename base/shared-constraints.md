@@ -101,10 +101,25 @@ When songs ARE translated: lowercase start, no end period, commas and question m
 - **CRITICAL: First line NEVER starts with a dash.** Dashes only for second speaker.
 - Second speaker: `-` (dash, NO space after dash): `Waar kom je vandaan?\n-Uit Amsterdam.`
 - Merge control markers: `[SC]` (speaker change), `[NM]` (no merge), or nothing (same speaker).
-- **Default is NO marker** (= same speaker, eligible for merge). Only use markers when speaker status is clear:
-  - `[SC]` — confident different speaker from previous cue
-  - `[NM]` — ONLY for genuinely ambiguous cases (e.g., unclear if narration shifted to interview)
-- In documentary narration: consecutive cues from the same narrator should have NO marker. Do not mark `[NM]` just because there's a pause or topic shift within the same speaker.
+- `[SC]` — different speaker from previous cue. **Place liberally.** Missing an `[SC]` causes the merge script to mash two speakers together — this is far worse than an unnecessary `[SC]` (which merely prevents a merge).
+- `[NM]` — ONLY for genuinely ambiguous cases (e.g., unclear if narration shifted to interview)
+- No marker = same speaker, eligible for merge.
+
+### How to detect speaker changes
+
+**The source SRT is your primary signal.** Most source files already contain dual-speaker dash markers (`- Line A / - Line B`). These tell you exactly where speakers change:
+
+1. **Source cue has dashes** → the cue contains two speakers. When you split this into separate NL cues, mark the second speaker's cue with `[SC]`.
+2. **Source cue follows a dashed cue** → check whether the new cue continues speaker A, speaker B, or introduces speaker C. Mark `[SC]` if the speaker differs from the previous NL cue.
+3. **Source has no dashes but speaker clearly changes** (e.g., a question followed by an answer from a different character) → mark `[SC]`.
+
+Do NOT guess. Read the source dashes and sentence context.
+
+### Genre defaults for [SC]
+
+- **Comedy / fast-unscripted:** Assume speaker change unless clearly the same speaker. In rapid-fire dialogue, MOST cues change speaker. When in doubt, mark `[SC]`.
+- **Documentary:** Consecutive cues from the same narrator have NO marker. Do not mark `[SC]` or `[NM]` just because there's a pause or topic shift within the same speaker.
+- **Drama:** Mark `[SC]` at every speaker change. When uncertain (e.g., off-screen voice), prefer `[SC]` over omitting it.
 
 ## Line Treatment
 
