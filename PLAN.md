@@ -4,98 +4,29 @@
 
 This plan captures the next round of improvements identified during a skill-creator assessment (2026-03-02). The previous plan (merge-aware timing QC, Levels 1+2) has been fully implemented. The skill scores 8.2/10 overall — architecture, progressive disclosure, and the exemplar system are strong. The gaps are in test coverage, minor structural improvements, and orchestrator complexity.
 
-## Priority 1: Genre-Diverse Evaluation Test Cases
+## Priority 1: Genre-Diverse Evaluation Test Cases — DONE
 
-### Problem
-
-The eval suite has a single 81-cue test file covering comedy (Fawlty Towers) with some documentary cues mixed in. Four genre translators exist (comedy, documentary, drama, fast-unscripted) but only comedy is tested end-to-end. Genre-specific regressions (e.g. register handling in drama, terminology in documentary) would go undetected.
-
-### Plan
-
-1. **Create `evals/test_documentary.en.srt`** (~30 cues)
-   - Source: extract representative cues from a documentary with narration + interview segments
-   - Cover: formal register, statistics/dates, military/historical terminology, narrator voice, interview speech patterns
-   - Include at least 2 CPS-pressure cues and 1 multi-cue continuation
-
-2. **Create `evals/test_drama.en.srt`** (~30 cues)
-   - Source: extract representative cues from a character-driven drama
-   - Cover: T-V register shifts (je/u), emotional dialogue without `!`, period-appropriate vocabulary, rapid multi-speaker exchanges, idiom adaptation opportunities
-
-3. **Add test entries to `evals/evals.json`**
-   - Documentary: translation (25fps, documentary genre) → merge (1000ms/7000ms) → validation
-   - Drama: translation (24fps, drama genre) → merge (1000ms/7000ms) → validation
-   - Each with genre-appropriate expected outputs and assertions
-
-4. **Update `evals/README.md`** with the new test files and what they cover
-
-### Success Criteria
-
-- Three genre-specific test files (comedy, documentary, drama) in evals/
-- Each tests the full pipeline: translate → merge → validate
-- Genre-specific assertions (e.g. drama checks T-V consistency, documentary checks terminology)
+Added two genre-specific test files alongside the existing comedy test:
+- `evals/test_documentary.en.srt` (31 cues) — World At War narration, witness interviews, Planet Earth nature narration, SDH
+- `evals/test_drama.en.srt` (31 cues) — Remains of the Day: T-V register shifts, rapid multi-speaker, emotional scenes, idiom adaptation
+- `evals/evals.json` expanded from 3 to 9 tests (3 pipelines x translate → merge → validate)
+- `evals/README.md` updated with full scenario tables for all three test files
 
 ---
 
-## Priority 2: Unit Tests for Core Scripts
+## Priority 2: Unit Tests for Core Scripts — DONE
 
-### Problem
-
-`auto_merge_cues.py` (423 lines) and `validate_srt.py` (593 lines) are the two most-changed scripts in the pipeline. They have no unit tests. `test_timing_qc.py` covers the timing QC module well, proving the pattern works. A script change that breaks merge logic or validation would only surface during a full pipeline run.
-
-### Plan
-
-1. **Create `scripts/test_auto_merge.py`** — pytest unit tests for the merge script:
-   - `test_detect_merge_marker()` — [SC], [NM], no marker
-   - `test_can_merge_text_same_speaker()` — text combination, ellipsis stripping, line length limits
-   - `test_can_merge_text_dual_speaker()` — dash formatting, first-line-no-dash rule
-   - `test_merge_cues_basic()` — simple 2-cue merge within gap/duration limits
-   - `test_merge_cues_respects_nm()` — [NM] marker prevents merge
-   - `test_merge_cues_sc_creates_dual_speaker()` — [SC] marker creates dash format
-   - `test_merge_cues_gap_too_large()` — no merge when gap exceeds threshold
-   - `test_trivial_reply_absorption()` — short reply merged into preceding cue
-   - `test_dual_speaker_not_collapsed()` — pre-existing dual-speaker cues preserved
-
-2. **Create `scripts/test_validate_srt.py`** — pytest unit tests for the validator:
-   - `test_fix_punctuation()` — `!` → `.`, `;` → `.`
-   - `test_fix_ellipsis()` — `…` → `...`
-   - `test_fix_line_length()` — re-breaks long lines, bottom-heavy preference
-   - `test_fix_overlap()` — adjusts end time to enforce minimum gap
-   - `test_fix_speaker_dash()` — normalizes to second-speaker-only dash
-   - `test_remove_empty_cues()` — blank/whitespace-only cues removed
-   - `test_validate_cps_soft_hard()` — correct error classification by CPS threshold
-   - `test_validate_line_count()` — 3+ line cues flagged
-   - `test_duplicate_text_detection()` — consecutive identical cues detected
-
-3. **Add a `pytest.ini` or `pyproject.toml` section** for test discovery in `scripts/`
-
-### Success Criteria
-
-- `pytest scripts/test_auto_merge.py scripts/test_validate_srt.py scripts/test_timing_qc.py` passes
-- Tests use synthetic SRT data (no external file dependencies)
-- Merge script and validator have >80% function coverage
+Added pytest unit tests for the two most-changed pipeline scripts:
+- `scripts/test_auto_merge.py` (391 lines, 11 test classes) — marker detection, merge logic, dual-speaker, trivial replies, edge cases
+- `scripts/test_validate_srt.py` (446 lines, 15 test classes) — all fix functions, all validation checks, full round-trip tests
+- `pyproject.toml` added with pytest configuration
+- 113 total tests (including existing `test_timing_qc.py`), all passing in 0.35s
 
 ---
 
-## Priority 3: SKILL.md — Mention Exemplars in Routing Table
+## Priority 3: SKILL.md — Mention Exemplars in Routing Table — DONE
 
-### Problem
-
-SKILL.md's phase group table doesn't mention the exemplar system. A first-time reader wouldn't know exemplars exist until they're deep into workflow-translate.md. Since exemplars are the single biggest quality driver, they deserve visibility at the routing level.
-
-### Plan
-
-Update the Translation row in SKILL.md's phase group table:
-
-| Group | Phases | Context loaded |
-|-------|--------|----------------|
-| Translation | 2 | shared-constraints + workflow-translate + translator + `references/exemplars/*` |
-
-One-line change. The workflow-translate.md Phase 1 already instructs loading them — this just makes them visible from the top level.
-
-### Success Criteria
-
-- SKILL.md Translation row mentions exemplars
-- No other SKILL.md changes needed
+Added `references/exemplars/*` to the Translation row in SKILL.md's phase group table.
 
 ---
 
