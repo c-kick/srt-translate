@@ -99,24 +99,15 @@ One-line change. The workflow-translate.md Phase 1 already instructs loading the
 
 ---
 
-## Priority 4: Archive One-Off Scripts
+## Priority 4: Remove One-Off Scripts — DONE
 
-### Problem
+Deleted four hard-coded debugging artifacts that had no reuse value:
+- `_condense_cps.py` — episode-specific CPS edits for Blood Money S01E01
+- `_check_merge.py` — hard-coded merge diagnostic for Blood Money
+- `_run_vad.sh` — hard-coded VAD wrapper for Blood Money
+- `run_vad_fawlty.sh` — hard-coded VAD wrapper for Fawlty Towers S01E06
 
-Four one-off scripts sit alongside pipeline scripts: `_condense_cps.py`, `_check_merge.py`, `_run_vad.sh`, `run_vad_fawlty.sh`. The underscore convention signals "not pipeline" but they still clutter `scripts/` and could confuse someone reading the codebase.
-
-### Plan
-
-1. Create `scripts/_archive/`
-2. Move all four files there
-3. Update `.gitignore` if needed (unlikely — they're tracked)
-4. Add a one-line `scripts/_archive/README.md`: "One-off helper scripts kept for reference. Not part of the pipeline."
-
-### Success Criteria
-
-- `scripts/` contains only pipeline scripts and tests
-- Archived scripts are still accessible for reference
-- No pipeline behavior changes
+All techniques are already captured in pipeline scripts and workflow docs.
 
 ---
 
@@ -175,5 +166,8 @@ The SKILL.md description is functional but could be tuned for better triggering 
 | `scripts/test_auto_merge.py` | **New:** Merge script unit tests | 2 |
 | `scripts/test_validate_srt.py` | **New:** Validator unit tests | 2 |
 | `SKILL.md` | Add exemplars to Translation row | 3 |
-| `scripts/_archive/` | **New:** Move one-off scripts here | 4 |
+| `scripts/_condense_cps.py` | **Deleted:** hard-coded one-off | 4 |
+| `scripts/_check_merge.py` | **Deleted:** hard-coded one-off | 4 |
+| `scripts/_run_vad.sh` | **Deleted:** hard-coded one-off | 4 |
+| `scripts/run_vad_fawlty.sh` | **Deleted:** hard-coded one-off | 4 |
 | `SKILL.md` (description) | Optimized triggering description | 5 |
