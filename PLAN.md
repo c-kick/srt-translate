@@ -1,297 +1,179 @@
-# Implementation Plan: Improved Timing QC
+# Improvement Plan: Skill Hardening & Test Coverage
 
 ## Context
 
-This plan replaces the PocketSphinx approach described in TODO.md with a simpler, more reliable solution based on two independent analyses and an independent review of the codebase.
+This plan captures the next round of improvements identified during a skill-creator assessment (2026-03-02). The previous plan (merge-aware timing QC, Levels 1+2) has been fully implemented. The skill scores 8.2/10 overall — architecture, progressive disclosure, and the exemplar system are strong. The gaps are in test coverage, minor structural improvements, and orchestrator complexity.
 
-## Problem Statement
+## Priority 1: Genre-Diverse Evaluation Test Cases
 
-When Claude translates EN→NL subtitles, it merges and redistributes content across cue boundaries. The current Phase 9 VAD timing check (`vad_timing_check.py`) maps NL cues to EN cues using start-time proximity (`match_source_cues()` with 500ms tolerance). This mapping breaks when:
-- Phase 2 (translation) merges/drops cues, changing the NL cue count relative to EN
-- Phase 4 (auto merge) further reduces cue count
-- Timecodes shift due to Phase 5 end-time extensions
+### Problem
 
-Result: Phase 9 misidentifies which EN speech corresponds to which NL cue, producing false positives and missing real misalignments.
+The eval suite has a single 81-cue test file covering comedy (Fawlty Towers) with some documentary cues mixed in. Four genre translators exist (comedy, documentary, drama, fast-unscripted) but only comedy is tested end-to-end. Genre-specific regressions (e.g. register handling in drama, terminology in documentary) would go undetected.
 
-## Why NOT PocketSphinx
+### Plan
 
-Both analyses agree:
-1. **PocketSphinx is not in the repo** despite TODO.md claiming "already in repo." No `forced_align.py` exists.
-2. **PocketSphinx accuracy (100-300ms) overlaps the detection threshold (500ms)**, making it unreliable for documentary content (the primary use case) where background music/ambience degrades alignment further.
-3. **The core problem is mapping, not alignment.** Even with perfect word-level timestamps, you still need to know which EN words correspond to which NL cues. Forced alignment doesn't solve this.
-4. **Simpler solutions exist** that leverage data already flowing through the pipeline.
+1. **Create `evals/test_documentary.en.srt`** (~30 cues)
+   - Source: extract representative cues from a documentary with narration + interview segments
+   - Cover: formal register, statistics/dates, military/historical terminology, narrator voice, interview speech patterns
+   - Include at least 2 CPS-pressure cues and 1 multi-cue continuation
 
-## Key Design Constraint: Use Timecodes, Not Indices
+2. **Create `evals/test_drama.en.srt`** (~30 cues)
+   - Source: extract representative cues from a character-driven drama
+   - Cover: T-V register shifts (je/u), emotional dialogue without `!`, period-appropriate vocabulary, rapid multi-speaker exchanges, idiom adaptation opportunities
 
-**Learned from review:** Cue indices are rewritten by Phase 3 (`validate_srt.py --fix`) and again by Phase 7 (`renumber_cues.py`). Any mapping keyed by cue index will break when indices change. All mapping must use **start-time timecodes** as the primary key, since start times survive all pipeline phases (only end times are extended in Phase 5).
+3. **Add test entries to `evals/evals.json`**
+   - Documentary: translation (25fps, documentary genre) → merge (1000ms/7000ms) → validation
+   - Drama: translation (24fps, drama genre) → merge (1000ms/7000ms) → validation
+   - Each with genre-appropriate expected outputs and assertions
 
----
+4. **Update `evals/README.md`** with the new test files and what they cover
 
-## Strategy: Incremental, Three-Level Improvement
+### Success Criteria
 
-### Level 1: Merge-Aware Cue Mapping (Low effort, High impact)
-
-**What:** Improve Phase 9's NL→EN mapping by consuming the Phase 4 merge report, matching by timecodes rather than indices.
-
-**Why it works:** `auto_merge_cues.py` already records `source_indices` for every merge (line 294). Combined with an enhancement to also record source timecodes, this tells Phase 9 exactly which time windows were combined, enabling accurate matching to EN cues.
-
-**Changes:**
-
-1. **`scripts/auto_merge_cues.py`** — Enhance the merge report to include source cue timecodes alongside indices:
-   ```python
-   report.append({
-       "output_index": new_index,
-       "output_start_ms": merge_candidates[0].start_ms,
-       "output_end_ms": merge_candidates[-1].end_ms,
-       "source_indices": [mc.index for mc in merge_candidates],
-       "source_timecodes": [
-           {"start_ms": mc.start_ms, "end_ms": mc.end_ms}
-           for mc in merge_candidates
-       ],
-       "source_count": len(merge_candidates),
-       ...
-   })
-   ```
-
-2. **`scripts/vad_timing_check.py`** — Add `--merge-report` argument. Build a timecode-keyed merge map. For each NL cue, check if its start_ms matches a merge output's `output_start_ms` (within 50ms tolerance to account for minor Phase 5 adjustments). If matched, use the `source_timecodes` to find the original time windows, then match those to EN cues. Fall back to existing proximity matching for non-merged cues.
-
-3. **`base/workflow-post.md`** — Update Phase 9 invocation to pass `merge_report.json`.
-
-**No orchestrator changes needed:** Phases 3-9 run in a single Claude invocation within `run_postprocessing()`. The work directory is only cleaned after the invocation returns (line 588), so `merge_report.json` is available throughout all phases.
-
-**Estimated scope:** ~20 lines added to auto_merge_cues.py, ~80-100 lines of Python changes to vad_timing_check.py. No new dependencies. No new scripts.
-
-### Level 2: Draft-to-Source Timecode Mapping (Medium effort, Medium impact)
-
-**What:** Before Phase 3 renumbers/reorders cues, save the draft NL cue timecodes and explicitly match them to EN source cues by start-time proximity. This captures the NL→EN correspondence established during Phase 2 translation, before any post-processing.
-
-**Why timecodes, not indices:** Claude's cue numbering during Phase 2 is non-deterministic — when skipping SDH cues, Claude may number sequentially rather than preserving EN source indices. But start times are deterministic: NL cues inherit their source EN cue's start time. Start-time proximity matching between draft NL and source EN is reliable.
-
-**Changes:**
-
-1. **New: `scripts/save_draft_mapping.py`** (~80 lines) — Read draft.nl.srt and source EN SRT. Match each draft NL cue to EN cue(s) by start-time proximity. Output JSON mapping with timecodes as keys:
-   ```python
-   mapping = []
-   for nl_cue in draft_cues:
-       matched_en = [en for en in en_cues
-                     if abs(en.start_ms - nl_cue.start_ms) <= 500]
-       if not matched_en:
-           best = min(en_cues, key=lambda e: abs(e.start_ms - nl_cue.start_ms))
-           matched_en = [best] if abs(best.start_ms - nl_cue.start_ms) <= 1000 else []
-       mapping.append({
-           "nl_start_ms": nl_cue.start_ms,
-           "nl_end_ms": nl_cue.end_ms,
-           "en_indices": [e.index for e in matched_en],
-           "en_start_ms": matched_en[0].start_ms if matched_en else None,
-           "en_end_ms": matched_en[-1].end_ms if matched_en else None,
-       })
-   ```
-
-2. **`scripts/vad_timing_check.py`** — Add `--draft-mapping` argument. When provided alongside `--merge-report`, build the complete timecode-based chain:
-   - Final NL cue start_ms → merge report (find merge entry by output_start_ms) → source timecodes
-   - Source timecodes → draft mapping (find entry by nl_start_ms) → EN source cue timecodes
-   - This gives an accurate EN time window for each NL cue, even after multiple rounds of merging and renumbering.
-
-3. **`scripts/orchestrate.sh`** — In `run_postprocessing()`, the mapping step is part of the Claude prompt (Claude runs it as a bash command before Phase 3). Add to the Phase 3 instructions:
-   ```bash
-   python3 scripts/save_draft_mapping.py "${WORK_DIR}/draft.nl.srt" \
-       "${SOURCE_SRT}" --output "${WORK_DIR}/draft_mapping.json"
-   ```
-
-4. **`base/workflow-post.md`** — Document the pre-Phase-3 mapping step and updated Phase 9 invocation.
-
-**Estimated scope:** ~80 lines new script + ~60 lines changes to vad_timing_check.py.
-
-### Level 3: Optional Vosk Word-Level Alignment (High effort, Supplementary)
-
-**What:** If Levels 1+2 prove insufficient, add optional Vosk-based forced alignment as a supplementary signal for deep QC.
-
-**Why Vosk over PocketSphinx:** Better accuracy (50-150ms vs 100-300ms), smaller models (50MB vs 200MB), pre-built wheels (no SWIG), still CPU-friendly.
-
-**Changes:**
-
-1. **`scripts/requirements.txt`** — Add `vosk` as optional dependency.
-2. **`scripts/setup.sh`** — Add optional model download.
-3. **New: `scripts/forced_align.py`** (~150 lines) — Vosk-based word-level alignment, outputs JSON timestamp map.
-4. **`scripts/vad_timing_check.py`** — Add `--deep-qc` flag that uses forced alignment data as supplementary signal to confirm/refute flagged cues.
-
-**This level should ONLY be implemented if Levels 1+2 are insufficient.** It is not recommended as an initial step.
+- Three genre-specific test files (comedy, documentary, drama) in evals/
+- Each tests the full pipeline: translate → merge → validate
+- Genre-specific assertions (e.g. drama checks T-V consistency, documentary checks terminology)
 
 ---
 
-## Detailed Implementation: Level 1
+## Priority 2: Unit Tests for Core Scripts
 
-### Step 1: Enhance `auto_merge_cues.py` merge report
+### Problem
 
-At the `report.append(...)` call (line 294), add `output_start_ms`, `output_end_ms`, and `source_timecodes` fields:
+`auto_merge_cues.py` (423 lines) and `validate_srt.py` (593 lines) are the two most-changed scripts in the pipeline. They have no unit tests. `test_timing_qc.py` covers the timing QC module well, proving the pattern works. A script change that breaks merge logic or validation would only surface during a full pipeline run.
 
-```python
-report.append({
-    "output_index": new_index,
-    "output_start_ms": merge_candidates[0].start_ms,
-    "output_end_ms": merge_candidates[-1].end_ms,
-    "source_indices": [mc.index for mc in merge_candidates],
-    "source_timecodes": [
-        {"start_ms": mc.start_ms, "end_ms": mc.end_ms}
-        for mc in merge_candidates
-    ],
-    "source_count": len(merge_candidates),
-    "gap_ms": merge_candidates[1].start_ms - merge_candidates[0].end_ms if len(merge_candidates) > 1 else 0,
-    "combined_duration_ms": merged_cue.duration_ms,
-    "text": combined_text
-})
-```
+### Plan
 
-### Step 2: Modify `vad_timing_check.py`
+1. **Create `scripts/test_auto_merge.py`** — pytest unit tests for the merge script:
+   - `test_detect_merge_marker()` — [SC], [NM], no marker
+   - `test_can_merge_text_same_speaker()` — text combination, ellipsis stripping, line length limits
+   - `test_can_merge_text_dual_speaker()` — dash formatting, first-line-no-dash rule
+   - `test_merge_cues_basic()` — simple 2-cue merge within gap/duration limits
+   - `test_merge_cues_respects_nm()` — [NM] marker prevents merge
+   - `test_merge_cues_sc_creates_dual_speaker()` — [SC] marker creates dash format
+   - `test_merge_cues_gap_too_large()` — no merge when gap exceeds threshold
+   - `test_trivial_reply_absorption()` — short reply merged into preceding cue
+   - `test_dual_speaker_not_collapsed()` — pre-existing dual-speaker cues preserved
 
-Add new function:
+2. **Create `scripts/test_validate_srt.py`** — pytest unit tests for the validator:
+   - `test_fix_punctuation()` — `!` → `.`, `;` → `.`
+   - `test_fix_ellipsis()` — `…` → `...`
+   - `test_fix_line_length()` — re-breaks long lines, bottom-heavy preference
+   - `test_fix_overlap()` — adjusts end time to enforce minimum gap
+   - `test_fix_speaker_dash()` — normalizes to second-speaker-only dash
+   - `test_remove_empty_cues()` — blank/whitespace-only cues removed
+   - `test_validate_cps_soft_hard()` — correct error classification by CPS threshold
+   - `test_validate_line_count()` — 3+ line cues flagged
+   - `test_duplicate_text_detection()` — consecutive identical cues detected
 
-```python
-def load_merge_report(path):
-    """Load merge report JSON, return list of merge entries."""
-    if not path or not os.path.exists(path):
-        return []
-    with open(path) as f:
-        data = json.load(f)
-    return data.get('merges', [])
+3. **Add a `pytest.ini` or `pyproject.toml` section** for test discovery in `scripts/`
 
+### Success Criteria
 
-def build_merge_timecode_map(merges):
-    """Build lookup: output_start_ms → source_timecodes list.
-
-    Uses start_ms as key since start times are stable through pipeline.
-    """
-    tc_map = {}
-    for entry in merges:
-        key = entry.get('output_start_ms')
-        if key is not None:
-            tc_map[key] = entry.get('source_timecodes', [])
-    return tc_map
-
-
-def match_source_cues_enhanced(nl_cues, en_cues, merge_tc_map=None, tolerance_ms=500):
-    """
-    Map NL→EN using merge timecodes + proximity fallback.
-
-    For merged cues: expand to source timecodes, match each to EN.
-    For non-merged cues: use start-time proximity.
-    """
-    matches = {}
-    tc_match_tolerance = 50  # ms tolerance for timecode matching
-
-    for nl in nl_cues:
-        # Check if this NL cue is a merge result (by start_ms matching)
-        source_timecodes = None
-        if merge_tc_map:
-            for merge_start, src_tcs in merge_tc_map.items():
-                if abs(nl.start_ms - merge_start) <= tc_match_tolerance:
-                    source_timecodes = src_tcs
-                    break
-
-        if source_timecodes:
-            # Merged cue: find EN cues matching each source time window
-            matched = []
-            for src_tc in source_timecodes:
-                for en in en_cues:
-                    if (src_tc['start_ms'] - tolerance_ms <= en.start_ms
-                            <= src_tc['end_ms'] + tolerance_ms):
-                        if en not in matched:
-                            matched.append(en)
-            matches[nl.index] = matched if matched else _nearest_en(nl, en_cues, tolerance_ms)
-        else:
-            # Non-merged: existing proximity matching
-            matches[nl.index] = _match_by_proximity(nl, en_cues, tolerance_ms)
-
-    return matches
-
-
-def _match_by_proximity(nl_cue, en_cues, tolerance_ms):
-    """Match single NL cue to EN cues by start-time proximity."""
-    matched = []
-    for en in en_cues:
-        if nl_cue.start_ms - tolerance_ms <= en.start_ms <= nl_cue.end_ms + tolerance_ms:
-            matched.append(en)
-    if not matched and en_cues:
-        best = min(en_cues, key=lambda e: abs(e.start_ms - nl_cue.start_ms))
-        if abs(best.start_ms - nl_cue.start_ms) <= tolerance_ms:
-            matched = [best]
-    return matched
-
-
-def _nearest_en(nl_cue, en_cues, tolerance_ms):
-    """Fallback: find nearest EN cue."""
-    if not en_cues:
-        return []
-    best = min(en_cues, key=lambda e: abs(e.start_ms - nl_cue.start_ms))
-    return [best] if abs(best.start_ms - nl_cue.start_ms) <= tolerance_ms else []
-```
-
-Update `main()`:
-- Add `--merge-report` argument
-- Load merge report and build timecode map
-- Replace `match_source_cues()` call with `match_source_cues_enhanced()`
-
-### Step 3: Update `workflow-post.md`
-
-Update Phase 9 section to show the new invocation:
-
-```bash
-scripts/venv/bin/python3 scripts/vad_timing_check.py \
-    "$VIDEO_FILE" \
-    "${VIDEO_BASENAME}.nl.srt" \
-    "${VIDEO_BASENAME}.en.srt" \
-    --merge-report merge_report.json \
-    --report vad_timing.json
-```
+- `pytest scripts/test_auto_merge.py scripts/test_validate_srt.py scripts/test_timing_qc.py` passes
+- Tests use synthetic SRT data (no external file dependencies)
+- Merge script and validator have >80% function coverage
 
 ---
 
-## What NOT to Implement
+## Priority 3: SKILL.md — Mention Exemplars in Routing Table
 
-1. **Option A (alignment hints during translation):** Adds cognitive load to the most critical phase. Risk of degrading translation quality outweighs benefit.
-2. **Auto-correction of timecodes (TODO Step 5):** Too risky — corrections based on imperfect mapping can create cascading timing errors.
-3. **PocketSphinx:** Outdated, insufficient accuracy, unnecessary for this problem.
-4. **Index-based mapping:** Indices are rewritten by Phase 3 and Phase 7. All mapping must use start-time timecodes.
+### Problem
 
----
+SKILL.md's phase group table doesn't mention the exemplar system. A first-time reader wouldn't know exemplars exist until they're deep into workflow-translate.md. Since exemplars are the single biggest quality driver, they deserve visibility at the routing level.
 
-## Review Findings Incorporated
+### Plan
 
-The following issues from the independent plan review have been addressed:
+Update the Translation row in SKILL.md's phase group table:
 
-1. **Phase 7 renumbering breaks index-based lookup** → Redesigned to use timecodes as primary mapping keys throughout.
-2. **"Draft numbering = EN source mapping" is unreliable** → Level 2 now explicitly matches by start-time proximity rather than assuming index correspondence.
-3. **merge_report source_indices refer to post-Phase-3 indices** → Level 1 now uses `source_timecodes` (added to merge report) instead of indices.
-4. **Phase 5 end-time modifications not accounted for** → Start times are stable; plan now explicitly notes this and uses start_ms as the matching key with a 50ms tolerance.
-5. **Work dir cleanup timing concern overstated** → Clarified that Phases 3-9 run in a single Claude invocation within `run_postprocessing()`; work dir cleanup happens after.
+| Group | Phases | Context loaded |
+|-------|--------|----------------|
+| Translation | 2 | shared-constraints + workflow-translate + translator + `references/exemplars/*` |
 
----
+One-line change. The workflow-translate.md Phase 1 already instructs loading them — this just makes them visible from the top level.
 
-## Files Changed (Level 1 + Level 2)
+### Success Criteria
 
-| File | Change | Level |
-|------|--------|-------|
-| `scripts/auto_merge_cues.py` | Add timecodes to merge report | 1 |
-| `scripts/vad_timing_check.py` | Add merge-report and draft-mapping support | 1+2 |
-| `scripts/save_draft_mapping.py` | **New:** Match draft NL → EN by timecode | 2 |
-| `base/workflow-post.md` | Update Phase 9 docs, add pre-Phase-3 mapping step | 1+2 |
-| `TODO.md` | Update to reflect revised approach | 1 |
+- SKILL.md Translation row mentions exemplars
+- No other SKILL.md changes needed
 
 ---
 
-## Testing Strategy
+## Priority 4: Archive One-Off Scripts
 
-1. **Unit test for mapping logic:** Create a synthetic EN SRT (20 cues), NL SRT (15 cues, with some merges), and merge report. Verify the mapping correctly traces NL→EN using timecodes.
-2. **Integration test with real data:** Run the improved Phase 9 on the reference case mentioned in TODO.md (Fawlty Towers cues 102-108, documentary test). Compare flagged cues with/without merge-report support.
-3. **Regression check:** Run the improved Phase 9 on a known-good translation. Verify no false positives introduced.
+### Problem
+
+Four one-off scripts sit alongside pipeline scripts: `_condense_cps.py`, `_check_merge.py`, `_run_vad.sh`, `run_vad_fawlty.sh`. The underscore convention signals "not pipeline" but they still clutter `scripts/` and could confuse someone reading the codebase.
+
+### Plan
+
+1. Create `scripts/_archive/`
+2. Move all four files there
+3. Update `.gitignore` if needed (unlikely — they're tracked)
+4. Add a one-line `scripts/_archive/README.md`: "One-off helper scripts kept for reference. Not part of the pipeline."
+
+### Success Criteria
+
+- `scripts/` contains only pipeline scripts and tests
+- Archived scripts are still accessible for reference
+- No pipeline behavior changes
 
 ---
 
-## Success Criteria
+## Priority 5: Description Optimization (Triggering)
 
-1. Phase 9 correctly maps NL cues to EN cues even when cue counts differ by 20%+ (documentary merge ratios)
-2. Zero new false positives on clean translations
-3. Detection of the reference misalignment case (Fawlty Towers cues 102-108)
-4. No changes to translation phase (Phase 2) or its output format
-5. No new heavy dependencies
-6. All mapping uses timecodes, never indices, as primary keys
+### Problem
+
+The SKILL.md description is functional but could be tuned for better triggering accuracy. The skill-creator framework has a `run_loop.py` script that systematically tests and improves descriptions using train/test split evaluation.
+
+### Plan
+
+1. Generate 20 trigger eval queries (10 should-trigger, 10 should-not-trigger)
+   - Should-trigger: various phrasings of EN→NL subtitle translation, SRT localization, Dutch subtitle review, subtitle QC
+   - Should-not-trigger: near-misses like general translation without SRT, subtitle OCR, audio transcription, other-language subtitles, English-only standardization (srt-standardize-en territory)
+2. Review with user via HTML template
+3. Run `run_loop.py` with current model
+4. Apply best description
+
+### Success Criteria
+
+- Triggering accuracy ≥ 90% on held-out test set
+- No false triggers on srt-standardize-en territory
+- Description remains concise (under 100 words)
+
+---
+
+## Deferred: Orchestrate.sh Complexity
+
+### Observation
+
+`orchestrate.sh` is 691 lines of Bash and growing. It works, but Bash at this scale is fragile for error handling, string processing, and debugging. Parts of it (file concatenation, prompt construction, checkpoint management) would be cleaner in Python.
+
+### Why Deferred
+
+- It works reliably today
+- A rewrite is high-effort with no immediate quality gain
+- The risk of introducing regressions during migration is real
+- Better to invest in test coverage first (Priorities 1-2), which will make a future rewrite safer
+
+### Trigger for Revisiting
+
+- If a bug in orchestrate.sh takes >1 hour to debug
+- If a new feature requires significant Bash additions
+- After unit tests (Priority 2) are in place to catch regressions
+
+---
+
+## Files Changed (All Priorities)
+
+| File | Change | Priority |
+|------|--------|----------|
+| `evals/test_documentary.en.srt` | **New:** Documentary test cues | 1 |
+| `evals/test_drama.en.srt` | **New:** Drama test cues | 1 |
+| `evals/evals.json` | Add documentary + drama test entries | 1 |
+| `evals/README.md` | Document new test files | 1 |
+| `scripts/test_auto_merge.py` | **New:** Merge script unit tests | 2 |
+| `scripts/test_validate_srt.py` | **New:** Validator unit tests | 2 |
+| `SKILL.md` | Add exemplars to Translation row | 3 |
+| `scripts/_archive/` | **New:** Move one-off scripts here | 4 |
+| `SKILL.md` (description) | Optimized triggering description | 5 |
