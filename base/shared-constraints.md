@@ -102,7 +102,7 @@ When songs ARE translated: lowercase start, no end period, commas and question m
 - **CRITICAL: First line NEVER starts with a dash.** Dashes only for second speaker.
 - Second speaker: `-` (dash, NO space after dash): `Waar kom je vandaan?\n-Uit Amsterdam.`
 - Merge control markers: `[SC]` (speaker change), `[NM]` (no merge), or nothing (same speaker).
-- `[SC]` — different speaker from previous cue. **Place liberally.** Missing an `[SC]` causes the merge script to mash two speakers together — this is far worse than an unnecessary `[SC]` (which merely prevents a merge).
+- `[SC]` — different speaker from previous cue. **Place liberally.** Missing an `[SC]` causes the merge script to mash two speakers together — this is far worse than an unnecessary `[SC]` (which merely prevents a merge). Note: a speaker redirecting their attention to a different person is NOT a speaker change — e.g., the Major talking to Manuel then turning to greet Basil is still the Major speaking.
 - `[NM]` — ONLY for genuinely ambiguous cases (e.g., unclear if narration shifted to interview)
 - No marker = same speaker, eligible for merge.
 
