@@ -99,6 +99,8 @@ When songs ARE translated: lowercase start, no end period, commas and question m
 
 ## Dual Speakers
 
+### Output formatting rules
+
 - **CRITICAL: First line NEVER starts with a dash.** Dashes only for second speaker.
 - Second speaker: `-` (dash, NO space after dash): `Waar kom je vandaan?\n-Uit Amsterdam.`
 - Merge control markers: `[SC]` (speaker change), `[NM]` (no merge), or nothing (same speaker).
@@ -106,42 +108,82 @@ When songs ARE translated: lowercase start, no end period, commas and question m
 - `[NM]` — ONLY for genuinely ambiguous cases (e.g., unclear if narration shifted to interview)
 - No marker = same speaker, eligible for merge.
 
-### How to detect speaker changes
+### Phase 1 — Mechanical analysis (reading the source structure)
 
-**The source SRT is your primary signal.** Most source files already contain dual-speaker dash markers (`- Line A / - Line B`). These tell you exactly where speakers change:
+Before translating, read the source SRT to extract a list of individual utterances. The only structural signals available are:
 
-1. **Source cue has dashes** → the cue contains two speakers. When you split this into separate NL cues, mark the second speaker's cue with `[SC]`.
-2. **Source cue follows a dashed cue** → check whether the new cue continues speaker A, speaker B, or introduces speaker C. Mark `[SC]` if the speaker differs from the previous NL cue.
-3. **Source has no dashes but speaker clearly changes** (e.g., a question followed by an answer from a different character) → mark `[SC]`.
+1. **Dashes within a cue:** A dash on line 2 means lines 1 and 2 are different speakers. That's all — you don't know who either speaker is.
+2. **Continuation markers:** A trailing `...` or trailing `,` at the end of a line signals that the same voice continues into the next cue. This is the only case where you can mechanically link two cues to the same speaker.
+3. **Everything else is unknown.** A new cue without continuation markers could be anyone — the same speaker as the previous cue, a different one, or someone entirely new. You cannot determine this from structure alone.
 
-Do NOT guess. Read the source dashes and sentence context.
+The output of this phase is a flat list of utterances — each one a separate speech act, with no assumptions about who said it.
 
-### Speaker continuity after dual-speaker cues
+**Handling source errors:** Even if the source incorrectly dashes both lines (`- What, Basil? / - You'll be all right?`), or uses a comma instead of an ellipsis for continuation, the mechanical signals still apply. Incorrect dashes still tell you "two different speakers in this cue." A trailing comma still signals continuation.
 
-When a dual-speaker cue is followed by a single-speaker cue, you must determine WHO is speaking in the next cue. The terminal punctuation of the **last speaker** (speaker B) in the dual-speaker cue tells you:
+**Assumption:** Source subtitles contain speaker identification markers. If they are absent, you are likely dealing with a single-narrator documentary or similarly structured content. Only suspect missing markers if other quality issues are also present in the source.
 
-1. **Speaker B ends with `.` `!` `?`** (complete sentence) → next cue's speaker is **ambiguous**. It could be A, B, or even a new speaker C. Mark `[SC]` unless context makes the speaker obvious.
-   ```
-   Cue 1: Speaker A.        ← complete
-          -Speaker B.        ← complete
-   Cue 2: ???                ← could be A, B, or C — cannot merge
-   ```
+### Worked example — Phase 1
 
-2. **Speaker B ends with `...`** (ellipsis = explicit continuation) → next cue is **definitely speaker B**. Safe to merge (no `[SC]`).
-   ```
-   Cue 1: Speaker A?         ← complete
-          -Speaker B...       ← continues
-   Cue 2: Speaker B continued ← same speaker — can merge
-   ```
+Source cues:
 
-3. **Speaker B has no terminal punctuation** (no period, no ellipsis) → next cue is **likely speaker B** (implicit continuation). Safe to merge (no `[SC]`).
-   ```
-   Cue 1: Speaker A?         ← complete
-          -Speaker B          ← no period = continues
-   Cue 2: Speaker B continued ← same speaker — can merge
-   ```
+```
+Cue 1:  So you're sure
+        you'll be all right?
+Cue 2:  What, Basil?
+        -You'll be all right?
+Cue 3:  Will you get me my
+        bed jacket?
+Cue 4:  Bed jacket.
+        -And please, don't let
+        yourself be fooled…
+Cue 5:  by that horrible
+        builder again.
+```
 
-The same logic applies to speaker A: if speaker A's line is incomplete and the next cue has no dashes, it may be A continuing. But since A appears on line 1 and B on line 2, B's continuation into the next cue is far more common.
+Mechanical reading:
+
+- Cue 1: Single speaker (no dash).
+- Cue 2: Two different speakers (dash on line 2). Who they are is unknown — only that they're not the same person.
+- Cue 3: Single speaker (no dash). Could be anyone — same as Cue 2 line 1, same as Cue 2 line 2, or someone new entirely.
+- Cue 4: Two different speakers (dash on line 2).
+- Cue 5: Continuation of Cue 4's second speaker — Cue 4 line 2 ends with `…`, so the same voice carries into Cue 5.
+
+Extracted utterances (regardless of who they are):
+
+1. "So you're sure you'll be all right?"
+2. "What, Basil?"
+3. "You'll be all right?"
+4. "Will you get me my bed jacket?"
+5. "Bed jacket."
+6. "And please, don't let yourself be fooled by that horrible builder again."
+
+At this point, the only thing known for certain is that utterances 5 and 6 are the same speaker (continuation via `…`). Everything else requires contextual analysis.
+
+### Phase 2 — Contextual analysis (translator judgment)
+
+With the utterance list from Phase 1, the translator reads the content to determine who is saying what. This is a linguistic and contextual task — it requires understanding dialogue flow, question-response patterns, forms of address, and scene context.
+
+The translator identifies two voices in this stretch:
+
+- Speaker A: utterances 1, 2, 4, 5
+- Speaker B: utterances 3, 6
+
+**"Speaker A" and "Speaker B" are abstract voice references** — they mean "the two voices participating in this stretch of dialogue." They are NOT persistent character labels. Characters regularly swap between being called A or B depending on the cue structure. Always identify the actual character from sentence content before making register choices (je/jij/u, formal/informal).
+
+This contextual grouping determines two things:
+
+#### 1. Register and pronoun choices
+
+The translator must identify the actual characters behind A and B to decide on je/jij vs. u, tone, and style. The A/B labels from the utterance grouping do not carry this information — only the sentence content does.
+
+#### 2. Merge eligibility and `[SC]` placement
+
+Adjacent NL cues from the same speaker can merge; cross-speaker cues cannot. `[SC]` marks every speaker change.
+
+Applied to the example:
+
+- **Cue 1 → Cue 2 line 1:** Phase 1 cannot tell you these are different speakers — there's no dash between them. But the translator reads the content and determines they are. The NL cue gets `[SC]`. Without it, merging would produce `Dus je weet zeker dat je het redt? Wat, Basil?` — two characters mashed together without a dash.
+- **Cue 4 line 2 → Cue 5:** Same speaker, confirmed both mechanically (continuation via `…`) and contextually. These can merge: `En laat je alsjeblieft niet weer belazeren door die aannemer.`
 
 ### Genre defaults for [SC]
 
