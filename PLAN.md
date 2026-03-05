@@ -1,104 +1,160 @@
-# Improvement Plan: Skill Hardening & Test Coverage
+# Plan: Trim-to-Speech — Fix Subtitle Lingering
 
-## Context
+## Problem
 
-This plan captures the next round of improvements identified during a skill-creator assessment (2026-03-02). The previous plan (merge-aware timing QC, Levels 1+2) has been fully implemented. The skill scores 8.2/10 overall — architecture, progressive disclosure, and the exemplar system are strong. The gaps are in test coverage, minor structural improvements, and orchestrator complexity.
+Subtitles linger on screen well after the speaker stops talking. Confirmed on Helvetica (2007): **152 of 855 NL cues (17.8%) linger after speech**, of which 143 are NL-specific (not inherited from EN source timing).
 
-## Priority 1: Genre-Diverse Evaluation Test Cases — DONE
+This is uncomfortable to watch — the subtitle stays visible during silence, creating a disconnection between audio and text.
 
-Added two genre-specific test files alongside the existing comedy test:
-- `evals/test_documentary.en.srt` (31 cues) — World At War narration, witness interviews, Planet Earth nature narration, SDH
-- `evals/test_drama.en.srt` (31 cues) — Remains of the Day: T-V register shifts, rapid multi-speaker, emotional scenes, idiom adaptation
-- `evals/evals.json` expanded from 3 to 9 tests (3 pipelines x translate → merge → validate)
-- `evals/README.md` updated with full scenario tables for all three test files
+## Root Cause Analysis (verified 2026-03-05)
 
----
+The pipeline has **three mechanisms to extend end times** but **zero automated mechanisms to trim them**.
 
-## Priority 2: Unit Tests for Core Scripts — DONE
+### How lingering gets created
 
-Added pytest unit tests for the two most-changed pipeline scripts:
-- `scripts/test_auto_merge.py` (391 lines, 11 test classes) — marker detection, merge logic, dual-speaker, trivial replies, edge cases
-- `scripts/test_validate_srt.py` (446 lines, 15 test classes) — all fix functions, all validation checks, full round-trip tests
-- `pyproject.toml` added with pytest configuration
-- 113 total tests (including existing `test_timing_qc.py`), all passing in 0.35s
+1. **Inherited EN timing (primary cause — 84% of cases):** EN source subtitles have generous end times that extend past actual speech boundaries. NL cues inherit EN timecodes. Even though NL end times are typically shorter than EN (Dutch is more concise), they still overshoot speech end.
 
----
+2. **Gap-closing (secondary cause):** Phase 5 Step 0 (`extend_end_times.py --close-gaps 1000`) closes gaps < 1s by extending end times, pushing cues further into silence. This is the cause for the 12 cues where NL end exceeds EN end.
 
-## Priority 3: SKILL.md — Mention Exemplars in Routing Table — DONE
+3. **CPS extension (minor cause):** Phase 5 Step 1 extends for CPS > 13. Only affects cues with high CPS — but 99 of 152 lingering cues have CPS < 13, so CPS extension is not the primary driver.
 
-Added `references/exemplars/*` to the Translation row in SKILL.md's phase group table.
+### What exists but doesn't fix it
 
----
+- **Phase 9 (`vad_timing_check.py`):** Detects lingering but is QC-only — no `--fix` mode.
+- **Phase 10 (`extend_to_speech_lite.py`):** Only extends, never shortens (line 154: `return max(speech_end_ms, cue_end_ms)`).
+- **Workflow Phase 9 instructions:** Tell Claude to manually fix flagged cues — impractical for 150+ cues.
+- **`validate_srt.py`:** Has `fix_overlap()` which shortens for overlap resolution only, not speech alignment.
+- **`auto_merge_cues.py`:** Inherits last constituent's end_ms — does not create new lingering.
+- **Phase 6 (Linguistic Review):** Explicitly forbidden from touching timecodes.
 
-## Priority 4: Remove One-Off Scripts — DONE
+### Evidence summary
 
-Deleted four hard-coded debugging artifacts that had no reuse value:
-- `_condense_cps.py` — episode-specific CPS edits for Blood Money S01E01
-- `_check_merge.py` — hard-coded merge diagnostic for Blood Money
-- `_run_vad.sh` — hard-coded VAD wrapper for Blood Money
-- `run_vad_fawlty.sh` — hard-coded VAD wrapper for Fawlty Towers S01E06
-
-All techniques are already captured in pipeline scripts and workflow docs.
-
----
-
-## Priority 5: Description Optimization (Triggering)
-
-### Problem
-
-The SKILL.md description is functional but could be tuned for better triggering accuracy. The skill-creator framework has a `run_loop.py` script that systematically tests and improves descriptions using train/test split evaluation.
-
-### Plan
-
-1. Generate 20 trigger eval queries (10 should-trigger, 10 should-not-trigger)
-   - Should-trigger: various phrasings of EN→NL subtitle translation, SRT localization, Dutch subtitle review, subtitle QC
-   - Should-not-trigger: near-misses like general translation without SRT, subtitle OCR, audio transcription, other-language subtitles, English-only standardization (srt-standardize-en territory)
-2. Review with user via HTML template
-3. Run `run_loop.py` with current model
-4. Apply best description
-
-### Success Criteria
-
-- Triggering accuracy ≥ 90% on held-out test set
-- No false triggers on srt-standardize-en territory
-- Description remains concise (under 100 words)
+| Metric | Value |
+|--------|-------|
+| Total NL cues | 855 |
+| Lingering cues | 152 (17.8%) |
+| NL-specific (not inherited from EN) | 143 |
+| Lingering + CPS < 13 (safe to trim) | 99 (65%) |
+| Lingering + CPS 13-17 (trim with care) | 17 (11%) |
+| Lingering + CPS > 17 (need text condensation) | 36 (24%) |
+| NL end shorter than EN end | 127 (84%) |
+| NL end longer than EN end | 12 (8%) |
 
 ---
 
-## Deferred: Orchestrate.sh Complexity
+## Solution: `trim_to_speech.py`
 
-### Observation
+A new script that uses VAD to detect where speech actually ends and pulls back cue end times accordingly. Guarded by CPS constraints to ensure readability isn't sacrificed.
 
-`orchestrate.sh` is 691 lines of Bash and growing. It works, but Bash at this scale is fragile for error handling, string processing, and debugging. Parts of it (file concatenation, prompt construction, checkpoint management) would be cleaner in Python.
+### Algorithm
 
-### Why Deferred
+```
+For each cue:
+  1. Run VAD around the cue's time window
+  2. Find the last speech-to-silence transition before or near cue end
+  3. If cue end > speech_end + comfort_buffer:
+     a. Compute new_end = speech_end + comfort_buffer
+     b. Calculate resulting CPS with new_end
+     c. If CPS <= cps_soft_ceiling: apply trim
+     d. If CPS > cps_soft_ceiling but <= cps_hard_limit:
+        apply partial trim (extend to reach cps_soft_ceiling)
+     e. If CPS would exceed cps_hard_limit: skip (flag for text condensation)
+  4. Ensure new duration >= min_duration_ms
+  5. Ensure gap to next cue >= 0 (never create overlap)
+```
 
-- It works reliably today
-- A rewrite is high-effort with no immediate quality gain
-- The risk of introducing regressions during migration is real
-- Better to invest in test coverage first (Priorities 1-2), which will make a future rewrite safer
+### Parameters
 
-### Trigger for Revisiting
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--comfort-buffer` | 250 | ms to keep after speech end (prevents abrupt disappearance) |
+| `--min-trim` | 400 | Minimum trim amount in ms (skip smaller trims to avoid chasing VAD noise) |
+| `--cps-soft-ceiling` | 15 | Don't trim if CPS would exceed this (fps-aware via `--fps`) |
+| `--fps` | 25 | Framerate for constraint lookup |
+| `--aggressiveness` | 2 | VAD aggressiveness (0-3) |
+| `--hangover` | 210 | Smooth silence gaps shorter than this (ms) |
+| `--report` | - | Write JSON report of all trims |
+| `--dry-run` | - | Report what would be trimmed without modifying |
 
-- If a bug in orchestrate.sh takes >1 hour to debug
-- If a new feature requires significant Bash additions
-- After unit tests (Priority 2) are in place to catch regressions
+### CPS guard logic (fps-aware)
+
+The script imports `get_constraints()` from `srt_constants.py` to get framerate-specific limits:
+
+- **24fps:** cps_hard_limit=15, cps_optimal=11
+- **25fps:** cps_hard_limit=17, cps_optimal=12
+
+The `--cps-soft-ceiling` default is 15, which is safe for both framerates. For 25fps content, this is well under the hard limit (17), giving comfortable margin.
+
+### Integration with existing VAD infrastructure
+
+Reuse the global VAD approach from `vad_timing_check.py`:
+- `build_speech_map()` + `smooth_speech_map()` + `find_transitions()` for speech boundary detection
+- Import shared utilities from `srt_utils.py`
+- Reuse audio extraction and caching from `vad_timing_check.py`
+
+This avoids the per-cue VAD approach in `extend_to_speech_lite.py` which is less accurate (no global context for smoothing).
 
 ---
 
-## Files Changed (All Priorities)
+## Pipeline Integration
 
-| File | Change | Priority |
-|------|--------|----------|
-| `evals/test_documentary.en.srt` | **New:** Documentary test cues | 1 |
-| `evals/test_drama.en.srt` | **New:** Drama test cues | 1 |
-| `evals/evals.json` | Add documentary + drama test entries | 1 |
-| `evals/README.md` | Document new test files | 1 |
-| `scripts/test_auto_merge.py` | **New:** Merge script unit tests | 2 |
-| `scripts/test_validate_srt.py` | **New:** Validator unit tests | 2 |
-| `SKILL.md` | Add exemplars to Translation row | 3 |
-| `scripts/_condense_cps.py` | **Deleted:** hard-coded one-off | 4 |
-| `scripts/_check_merge.py` | **Deleted:** hard-coded one-off | 4 |
-| `scripts/_run_vad.sh` | **Deleted:** hard-coded one-off | 4 |
-| `scripts/run_vad_fawlty.sh` | **Deleted:** hard-coded one-off | 4 |
-| `SKILL.md` (description) | Optimized triggering description | 5 |
+### New phase position: Phase 4b (between merge and CPS optimization)
+
+```
+Phase 3:  Structural fix
+Phase 4:  Merge (auto_merge_cues.py)
+Phase 4b: Trim to speech (trim_to_speech.py)  <-- NEW
+Phase 5:  CPS optimization (extend_end_times.py)
+Phase 6:  Linguistic review
+...
+Phase 9:  VAD timing QC (vad_timing_check.py) — now mostly clean
+```
+
+**Why between merge and CPS:** Trimming before CPS optimization means Phase 5 can re-extend cues that genuinely need more display time (high CPS). This creates a natural push-pull: trim pulls back overlong cues, CPS extension pushes out underlong ones.
+
+### Workflow changes
+
+**`workflow-post.md`:** Add Phase 4b step between Phase 4 and Phase 5:
+
+```bash
+scripts/venv/bin/python3 scripts/trim_to_speech.py \
+    "$VIDEO_FILE" \
+    merged.nl.srt \
+    -o merged.nl.srt \
+    --fps ${FRAMERATE} \
+    --report trim_report.json \
+    -v
+```
+
+**`orchestrate.sh`:** Add trim invocation in `run_postprocessing()` prompt, between merge and CPS instructions.
+
+### Phase 9 impact
+
+With trim-to-speech in place, Phase 9 VAD QC should report far fewer linger issues. The manual fix instructions in workflow-post.md for lingering become a safety net rather than the primary mechanism.
+
+---
+
+## Files to Create/Modify
+
+| File | Change |
+|------|--------|
+| `scripts/trim_to_speech.py` | **New:** Core trim-to-speech script |
+| `scripts/test_trim_to_speech.py` | **New:** Unit tests (pytest) |
+| `base/workflow-post.md` | Add Phase 4b between Phase 4 and Phase 5 |
+| `scripts/orchestrate.sh` | Add trim step to post-processing prompt |
+
+---
+
+## Validation
+
+1. **Unit tests:** Test CPS guard, min-trim threshold, comfort buffer, overlap prevention, min-duration guard
+2. **Helvetica re-run:** Run `trim_to_speech.py` on current Helvetica NL output, then re-run `vad_timing_check.py` to measure improvement
+3. **Target:** Reduce linger count from 152 to < 30 (the ~36 high-CPS cues that can't be trimmed without text condensation, plus VAD edge cases)
+
+---
+
+## Out of Scope
+
+- **Text condensation for high-CPS lingering cues** — these 36 cues need shorter Dutch text, not shorter display time. Phase 5 Step 2 already handles this.
+- **`extend_to_speech_lite.py` changes** — Phase 10 (speech sync) is opt-in for slow speakers and orthogonal to this fix.
+- **EN source timing correction** — we don't modify the EN source; we work with what we get.
