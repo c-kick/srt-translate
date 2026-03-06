@@ -22,7 +22,9 @@ python3 scripts/save_draft_mapping.py draft.nl.srt "${VIDEO_BASENAME}.en.srt" \
 Fix structural errors only. **Do NOT condense text for CPS — that happens after merge in Phase 5.**
 
 ```bash
-python3 scripts/validate_srt.py draft.nl.srt --fix --output draft-fixed.nl.srt
+python3 scripts/validate_srt.py draft.nl.srt \
+  --source "${VIDEO_BASENAME}.en.srt" \
+  --fix --output draft-fixed.nl.srt
 ```
 
 Fix before merge:
@@ -34,6 +36,42 @@ Fix before merge:
 **Line length fix for dual-speaker cues:** If a dual-speaker cue has a line exceeding 42 characters and the other line is a trivial reply (`-Ja.`, `-Nee.`, `-Goed.`, `-Oké.`, etc.), drop the trivial reply and reflow the remaining text across two lines. The viewer hears the trivial reply — removing it frees both lines for the sentence that needs the space.
 
 **Do NOT fix:** CPS violations. Merging extends durations and lowers CPS naturally.
+
+### Timing drift (if `drift_errors` is non-empty)
+
+A `drift_errors` entry means consecutive NL cues have start times that deviate significantly from the nearest EN source cue — the translator computed a timestamp instead of copying from the source (typically after a long gap in the EN).
+
+To fix: identify the affected cue range and offset from the error message, then shift those cues:
+
+```python
+import re
+
+SHIFT_MS = <offset_in_ms>   # positive = shift forward, negative = shift back
+FIRST_CUE = <first_cue_num>
+LAST_CUE  = <last_cue_num>
+
+with open('draft-fixed.nl.srt', 'r') as f:
+    content = f.read()
+
+def ts(ms):
+    h,m,s,ms_r = ms//3600000,(ms%3600000)//60000,(ms%60000)//1000,ms%1000
+    return f"{h:02d}:{m:02d}:{s:02d},{ms_r:03d}"
+
+def shift(m):
+    num = int(m.group(1))
+    if not (FIRST_CUE <= num <= LAST_CUE):
+        return m.group(0)
+    def conv(h,mn,s,ms_r): return ((int(h)*60+int(mn))*60+int(s))*1000+int(ms_r)
+    s = conv(m.group(2),m.group(3),m.group(4),m.group(5)) + SHIFT_MS
+    e = conv(m.group(6),m.group(7),m.group(8),m.group(9)) + SHIFT_MS
+    return f"{num}\n{ts(s)} --> {ts(e)}"
+
+pat = re.compile(r'(\d+)\n(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})')
+with open('draft-fixed.nl.srt', 'w') as f:
+    f.write(pat.sub(shift, content))
+```
+
+After correcting timestamps, re-run Phase 3 to confirm `drift_errors` is empty before continuing.
 
 ---
 
@@ -229,11 +267,15 @@ Fix: "De soldaten marcheerden naar het front."
 ## Phase 7: Finalization
 
 ```bash
-python3 scripts/validate_srt.py merged.nl.srt --fix --output final.nl.srt
+python3 scripts/validate_srt.py merged.nl.srt \
+  --source "${VIDEO_BASENAME}.en.srt" \
+  --fix --output final.nl.srt
 python3 scripts/renumber_cues.py final.nl.srt --in-place
 python3 scripts/add_credit.py final.nl.srt --in-place --cps 12
 mv final.nl.srt "${VIDEO_BASENAME}.nl.srt"
 ```
+
+If `drift_errors` is non-empty here, timing drift survived post-processing. Follow the correction procedure from Phase 3 and re-run Phase 7.
 
 ---
 
@@ -382,7 +424,7 @@ All scripts require `srt_utils.py` in same directory.
 
 | Script | Purpose | Key flags |
 |--------|---------|-----------|
-| `validate_srt.py` | Validate + fix | `--fix --output --summary --report` |
+| `validate_srt.py` | Validate + fix | `--fix --output --summary --report --source EN_SRT` |
 | `auto_merge_cues.py` | Adjacent cue merge | `--gap-threshold --max-duration --report` |
 | `extract_cues.py` | Extract range | `--start N --end M --indices` |
 | `renumber_cues.py` | Fix sequence | `--in-place` |

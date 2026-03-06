@@ -252,7 +252,7 @@ def fix_subtitle(sub: Subtitle, prev_sub: Subtitle | None) -> tuple[Subtitle, li
     return sub, all_fixes
 
 
-def fix_srt(file_path: str, output_path: str | None = None) -> dict:
+def fix_srt(file_path: str, output_path: str | None = None, source_path: str | None = None) -> dict:
     """
     Fix all auto-fixable violations in SRT file.
     
@@ -330,6 +330,17 @@ def fix_srt(file_path: str, output_path: str | None = None) -> dict:
                for line in sub.text.split('\n'))
     })
 
+    # Timing-drift check against EN source (when supplied)
+    drift_errors: list[str] = []
+    drift_warnings: list[str] = []
+    if source_path:
+        src_path = Path(source_path)
+        if src_path.exists():
+            en_subs, _ = parse_srt_file(str(src_path))
+            drift_errors, drift_warnings = check_timing_drift(subtitles, en_subs)
+        else:
+            drift_warnings.append(f"--source file not found, timing-drift check skipped: {source_path}")
+
     return {
         'fixed': True,
         'output_file': out_path,
@@ -339,6 +350,8 @@ def fix_srt(file_path: str, output_path: str | None = None) -> dict:
         'unfixable_count': len(unfixable),
         'unfixable': unfixable,
         'unfixable_indices': unfixable_indices,
+        'drift_errors': drift_errors,
+        'drift_warnings': drift_warnings,
     }
 
 
@@ -648,7 +661,7 @@ def main():
 
     if args.fix:
         # Fix mode
-        result = fix_srt(str(file_path), args.output)
+        result = fix_srt(str(file_path), args.output, source_path=args.source)
         
         if args.unfixable_indices:
             indices = result.get('unfixable_indices', [])
