@@ -125,7 +125,7 @@ Gaps shorter than 1 second should be closed by extending end times (Auteursbond:
 
 ```bash
 python3 scripts/extend_end_times.py trimmed.nl.srt \
-  --close-gaps 1000 --min-gap ${MIN_GAP} --max-duration ${MAX_DURATION} \
+  --close-gaps 1000 --fps ${FRAMERATE} \
   -o trimmed.nl.srt
 ```
 

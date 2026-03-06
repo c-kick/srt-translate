@@ -10,18 +10,29 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from srt_utils import parse_srt_file, write_srt
+from srt_constants import get_constraints
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('input_file')
     parser.add_argument('--output', '-o', required=True)
     parser.add_argument('--target-cps', type=float, default=12.5)
-    parser.add_argument('--min-gap', type=int, default=120)
-    parser.add_argument('--max-duration', type=int, default=7000)
+    parser.add_argument('--min-gap', type=int, default=None,
+                        help='Min gap in ms (default: from --fps constraints)')
+    parser.add_argument('--max-duration', type=int, default=None,
+                        help='Max duration in ms (default: from --fps constraints)')
+    parser.add_argument('--fps', type=float, default=25,
+                        help='Framerate for constraint lookup (default: 25)')
     parser.add_argument('--threshold', type=float, default=13.0)
     parser.add_argument('--close-gaps', type=int, default=0, metavar='MS',
                         help='Close gaps smaller than MS by extending end times (Auteursbond: 1000)')
     args = parser.parse_args()
+
+    constraints = get_constraints(args.fps)
+    if args.min_gap is None:
+        args.min_gap = constraints['min_gap_ms']
+    if args.max_duration is None:
+        args.max_duration = constraints['max_duration_ms']
 
     cues, errors = parse_srt_file(args.input_file)
     extended = 0
