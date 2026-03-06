@@ -41,6 +41,12 @@ def get_ffsubsync_path() -> str:
     if venv_ffsubsync.exists():
         return str(venv_ffsubsync)
 
+    # Check the project venv (works even when run with system python)
+    script_dir = Path(__file__).resolve().parent
+    project_venv = script_dir / 'venv' / 'bin' / 'ffsubsync'
+    if project_venv.exists():
+        return str(project_venv)
+
     # Fall back to PATH
     return 'ffsubsync'
 

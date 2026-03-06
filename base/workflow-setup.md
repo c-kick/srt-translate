@@ -80,14 +80,14 @@ Classify: `< 24.5` → **24**, `≥ 24.5` → **25**. Include in checkpoint.
 
 ```bash
 # Sync external SRT
-python3 scripts/sync_subtitles.py "$VIDEO_FILE" source.en.srt \
+scripts/venv/bin/python3 scripts/sync_subtitles.py "$VIDEO_FILE" source.en.srt \
     -o "${VIDEO_BASENAME}.en.srt" -v
 
 # List embedded subtitle streams
-python3 scripts/sync_subtitles.py "$VIDEO_FILE" --list-streams
+scripts/venv/bin/python3 scripts/sync_subtitles.py "$VIDEO_FILE" --list-streams
 
 # Sync embedded stream
-python3 scripts/sync_subtitles.py "$VIDEO_FILE" --stream 0:s:0 \
+scripts/venv/bin/python3 scripts/sync_subtitles.py "$VIDEO_FILE" --stream 0:s:0 \
     -o "${VIDEO_BASENAME}.en.srt" -v
 ```
 
