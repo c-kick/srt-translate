@@ -19,6 +19,7 @@ import sys
 import json
 import argparse
 import re
+import bisect
 from pathlib import Path
 from srt_utils import parse_srt_file, Subtitle, write_srt, visible_length
 
@@ -30,6 +31,10 @@ from srt_constants import (
     NL_MIN_DURATION_MS as MIN_DURATION_MS,
     get_constraints,
 )
+
+# Timing drift detection thresholds (NL start vs nearest EN start)
+TIMING_DRIFT_WARN_MS = 3_000   # 3 s — suspicious, worth flagging
+TIMING_DRIFT_ERROR_MS = 5_000  # 5 s — almost certainly a translation timing error
 
 # Forbidden punctuation replacements
 PUNCTUATION_FIXES = {
@@ -337,6 +342,82 @@ def fix_srt(file_path: str, output_path: str | None = None) -> dict:
     }
 
 
+def check_timing_drift(
+    nl_subs: list,
+    en_subs: list,
+    warn_ms: int = TIMING_DRIFT_WARN_MS,
+    error_ms: int = TIMING_DRIFT_ERROR_MS,
+) -> tuple[list, list]:
+    """
+    Compare NL cue start times against the EN source to detect systematic drift.
+
+    Every NL cue originates from an EN cue whose timestamp was copied during
+    translation.  A large deviation between the NL start time and the nearest
+    EN start time indicates the translator computed a wrong timestamp instead
+    of copying the source — as happened in the Helvetica (2007) batch-6 error
+    where 38 consecutive cues were shifted 20 s early.
+
+    Consecutive cues with the same deviation magnitude are collapsed into a
+    single range report to keep output readable.
+
+    Returns (errors, warnings).
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if not en_subs:
+        return errors, warnings
+
+    en_starts = sorted(sub.start_ms for sub in en_subs)
+
+    # Collect per-cue deviations: (cue_index, deviation_ms)
+    deviations: list[tuple[int, int]] = []
+    for nl_sub in nl_subs:
+        nl_start = nl_sub.start_ms
+        # Binary search: nearest EN start
+        pos = bisect.bisect_left(en_starts, nl_start)
+        candidates = []
+        if pos < len(en_starts):
+            candidates.append(en_starts[pos])
+        if pos > 0:
+            candidates.append(en_starts[pos - 1])
+        nearest = min(candidates, key=lambda t: abs(t - nl_start))
+        deviation = abs(nl_start - nearest)
+        if deviation >= warn_ms:
+            deviations.append((nl_sub.index, deviation))
+
+    if not deviations:
+        return errors, warnings
+
+    # Collapse consecutive cues into runs for readability
+    runs: list[tuple[int, int, int]] = []  # (first_idx, last_idx, max_deviation_ms)
+    first_idx, last_idx, run_max = deviations[0][0], deviations[0][0], deviations[0][1]
+    for idx, dev in deviations[1:]:
+        if idx == last_idx + 1:
+            last_idx = idx
+            run_max = max(run_max, dev)
+        else:
+            runs.append((first_idx, last_idx, run_max))
+            first_idx, last_idx, run_max = idx, idx, dev
+    runs.append((first_idx, last_idx, run_max))
+
+    for first, last, max_dev in runs:
+        count = last - first + 1
+        label = f"Cue {first}" if count == 1 else f"Cues {first}–{last} ({count} cues)"
+        msg = (
+            f"{label}: start time deviates {max_dev / 1000:.1f}s from nearest EN source cue "
+            f"— possible systematic timing drift (translator used computed instead of source timestamp)"
+        )
+        # Single-cue deviations (e.g. credits appended after last EN cue) are
+        # warnings only; multi-cue runs indicate a systematic shift → error.
+        if max_dev >= error_ms and count > 1:
+            errors.append(msg)
+        else:
+            warnings.append(msg)
+
+    return errors, warnings
+
+
 def validate_subtitle(sub: Subtitle, prev_sub: Subtitle | None) -> tuple[list, list]:
     """Validate a single subtitle cue. Returns (errors, warnings)."""
     errors = []
@@ -462,26 +543,44 @@ def validate_subtitle(sub: Subtitle, prev_sub: Subtitle | None) -> tuple[list, l
     return errors, warnings
 
 
-def validate_srt(file_path: str) -> dict:
-    """Validate entire SRT file against unified constraints."""
+def validate_srt(file_path: str, source_path: str | None = None) -> dict:
+    """Validate entire SRT file against unified constraints.
+
+    Args:
+        file_path:   Path to the NL SRT file to validate.
+        source_path: Optional path to the EN source SRT.  When provided,
+                     start times are compared against the source to detect
+                     systematic timing drift introduced during translation.
+    """
     subtitles, parse_errors = parse_srt_file(file_path)
-    
+
     all_errors = list(parse_errors)
     all_warnings = []
-    
+
     cps_values = []
-    
+
     prev_sub = None
     for sub in subtitles:
         errors, warnings = validate_subtitle(sub, prev_sub)
         all_errors.extend(errors)
         all_warnings.extend(warnings)
-        
+
         if sub.duration_seconds > 0:
             cps_values.append(sub.cps)
-        
+
         prev_sub = sub
-    
+
+    # Timing-drift check against EN source (when supplied)
+    if source_path:
+        src_path = Path(source_path)
+        if src_path.exists():
+            en_subs, _ = parse_srt_file(str(src_path))
+            drift_errors, drift_warnings = check_timing_drift(subtitles, en_subs)
+            all_errors.extend(drift_errors)
+            all_warnings.extend(drift_warnings)
+        else:
+            all_warnings.append(f"--source file not found, timing-drift check skipped: {source_path}")
+
     # Check sequential numbering
     for i, sub in enumerate(subtitles):
         if sub.index != i + 1:
@@ -525,6 +624,8 @@ def main():
                         help='Show only aggregate stats (suppress individual violations)')
     parser.add_argument('--report', '-r', metavar='FILE',
                         help='Write full validation report to JSON file')
+    parser.add_argument('--source', metavar='EN_SRT',
+                        help='EN source SRT file to check timing drift against')
     parser.add_argument('--fps', type=int, choices=[24, 25],
                         help='Framerate (24 or 25). Overrides default constraint values.')
     args = parser.parse_args()
@@ -561,7 +662,7 @@ def main():
         sys.exit(0 if result.get('fixed', False) else 1)
     else:
         # Validate mode
-        result = validate_srt(str(file_path))
+        result = validate_srt(str(file_path), source_path=args.source)
 
         # Write full report to file if requested
         if args.report:
