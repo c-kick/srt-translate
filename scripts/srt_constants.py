@@ -18,7 +18,7 @@ _NL_CONSTRAINTS = {
         'max_chars_per_line': 42,
         'max_duration_ms': 7007,
         'min_duration_ms': 1400,
-        'min_gap_ms': 125,        # 3 frames at 23.976/24fps
+        'min_gap_ms': round(3 * 1000 / 24),  # 3 frames
         'max_words_per_min': 180,
         'max_lines': 2,
         'unbreak_threshold': 40,
@@ -30,7 +30,7 @@ _NL_CONSTRAINTS = {
         'max_chars_per_line': 42,
         'max_duration_ms': 7000,
         'min_duration_ms': 830,
-        'min_gap_ms': 120,        # 3 frames at 25fps
+        'min_gap_ms': round(3 * 1000 / 25),  # 3 frames
         'max_words_per_min': 180,
         'max_lines': 2,
         'unbreak_threshold': 40,
@@ -45,7 +45,7 @@ _EN_CONSTRAINTS = {
         'max_chars_per_line': 42,
         'max_duration_ms': 7007,
         'min_duration_ms': 1000,
-        'min_gap_ms': 125,
+        'min_gap_ms': round(3 * 1000 / 24),  # 3 frames
         'max_words_per_min': 180,
         'max_lines': 2,
     },
@@ -56,7 +56,7 @@ _EN_CONSTRAINTS = {
         'max_chars_per_line': 42,
         'max_duration_ms': 7000,
         'min_duration_ms': 1000,
-        'min_gap_ms': 120,
+        'min_gap_ms': round(3 * 1000 / 25),  # 3 frames
         'max_words_per_min': 180,
         'max_lines': 2,
     },
