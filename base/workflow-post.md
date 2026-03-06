@@ -89,12 +89,34 @@ If dual-speaker count is **below the expected range**, the translator likely mis
 
 ---
 
-## Phase 5: CPS Optimization (Post-Merge)
+## Phase 4b: Trim to Speech
 
-Validate CPS on the merged file:
+Pulls back cue end times that linger past speech boundaries. Uses VAD (same approach as Phase 9) to detect where speech actually ends and trims accordingly, guarded by CPS constraints.
 
 ```bash
-python3 scripts/validate_srt.py merged.nl.srt --summary --report cps_validation.json
+scripts/venv/bin/python3 scripts/trim_to_speech.py \
+    "$VIDEO_FILE" \
+    merged.nl.srt \
+    --output trimmed.nl.srt \
+    --fps ${FRAMERATE} \
+    --report trim_report.json \
+    -v
+```
+
+**If the script fails:** Copy merged.nl.srt to trimmed.nl.srt and continue. Phase 9 will catch any lingering issues.
+
+```bash
+cp merged.nl.srt trimmed.nl.srt
+```
+
+---
+
+## Phase 5: CPS Optimization (Post-Merge)
+
+Validate CPS on the trimmed file:
+
+```bash
+python3 scripts/validate_srt.py trimmed.nl.srt --summary --report cps_validation.json
 ```
 
 ### Step 0: Close Small Gaps (Auteursbond)
@@ -102,9 +124,9 @@ python3 scripts/validate_srt.py merged.nl.srt --summary --report cps_validation.
 Gaps shorter than 1 second should be closed by extending end times (Auteursbond: "aansluiten"):
 
 ```bash
-python3 scripts/extend_end_times.py merged.nl.srt \
+python3 scripts/extend_end_times.py trimmed.nl.srt \
   --close-gaps 1000 --min-gap ${MIN_GAP} --max-duration ${MAX_DURATION} \
-  -o merged.nl.srt
+  -o trimmed.nl.srt
 ```
 
 ### Step 1: Extend End Times (ALL cues with CPS > 13)
@@ -297,6 +319,8 @@ scripts/venv/bin/python3 scripts/extend_to_speech_lite.py \
 
 **When NOT to use:** Fast dialogue (comedy, action), music-heavy content, already well-timed source.
 
+**Note:** Phase 10 extends end times to speech boundaries. If Phase 4b (trim-to-speech) has already run, Phase 10 may partially undo trims. Avoid combining both unless you have a specific reason (e.g., slow-speaker content that also has lingering issues).
+
 ---
 
 ## Write Log File (Final Step)
@@ -363,6 +387,7 @@ All scripts require `srt_utils.py` in same directory.
 | `extract_cues.py` | Extract range | `--start N --end M --indices` |
 | `renumber_cues.py` | Fix sequence | `--in-place` |
 | `add_credit.py` | Add credit | `--in-place --cps` |
+| `trim_to_speech.py` | Trim lingering end times (VAD) | `--comfort-buffer --min-trim --fps --output --report --dry-run` |
 | `extend_to_speech_lite.py` | Extend to speech end (VAD) | `--aggressiveness --max-extension` |
 | `check_line_balance.py` | Line balance QC + auto-fix | `--fix --output --ratio` |
 | `save_draft_mapping.py` | Pre-Phase-3 NL→EN mapping | `--output --tolerance` |
