@@ -512,13 +512,14 @@ Execute all phases in order:
 
 1. **Phase 3:** Structural fix on draft.nl.srt
 2. **Phase 4:** Script merge with genre parameters above
-3. **Phase 5:** CPS validation — fix outliers > 17
-4. **Phase 6:** Linguistic review — all cues in ~80-cue chunks
-5. **Phase 7:** Finalize (validate, renumber, add credit, rename to ${OUTPUT_SRT})
-6. **Phase 8:** Line balance QC (auto-fix)
-7. **Phase 9:** VAD timing QC
+3. **Phase 4b:** Trim to speech → trimmed.nl.srt + trim_report.json. If trim fails, copy merged.nl.srt to trimmed.nl.srt and continue.
+4. **Phase 5:** CPS optimization on trimmed.nl.srt (NOT merged.nl.srt) — fix outliers > 17
+5. **Phase 6:** Linguistic review — all cues in ~80-cue chunks
+6. **Phase 7:** Finalize (validate, renumber, add credit, rename to ${OUTPUT_SRT})
+7. **Phase 8:** Line balance QC (auto-fix)
+8. **Phase 9:** VAD timing QC
 ${speech_sync_instruction}
-8. **Write log** to ${LOG_DIR}/$(date +%Y-%m-%d)_${VIDEO_BASENAME}.md
+9. **Write log** to ${LOG_DIR}/$(date +%Y-%m-%d)_${VIDEO_BASENAME}.md
 
 All phases are mandatory. Do not skip any phase.
 
