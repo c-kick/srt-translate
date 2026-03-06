@@ -18,6 +18,9 @@
 #   CLAUDE_CODE_MAX_OUTPUT_TOKENS  (default: 128000)
 #   SKILL_DIR                      (default: auto-detected from script location)
 #   LOG_DIR                        (default: /mnt/nas/video/.claude/logs/srt-translate)
+#   MODEL_SETUP                    (default: sonnet)  — Phase 0-1: extraction, sync, classification
+#   MODEL_TRANSLATE                (default: opus)    — Phase 2: EN→NL translation
+#   MODEL_POST                     (default: sonnet)  — Phase 3-9: post-processing, QC
 #
 
 set -euo pipefail
@@ -29,6 +32,14 @@ SKILL_DIR="${SKILL_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
 LOG_DIR="${LOG_DIR:-/mnt/nas/video/.claude/logs/srt-translate}"
 export CLAUDE_CODE_MAX_OUTPUT_TOKENS="${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-128000}"
+
+# Model selection per phase — optimizes cost by matching model capability to task complexity.
+# Phase 0-1 (setup): tool orchestration + simple classification → Sonnet
+# Phase 2 (translation): professional EN→NL literary translation → Opus
+# Phase 3-9 (post-processing): script execution + linguistic review → Sonnet
+MODEL_SETUP="${MODEL_SETUP:-sonnet}"
+MODEL_TRANSLATE="${MODEL_TRANSLATE:-opus}"
+MODEL_POST="${MODEL_POST:-sonnet}"
 
 # Max cues per translation batch before forcing a context-clearing sub-invocation
 BATCH_SIZE=100
@@ -145,8 +156,16 @@ count_cues() {
 }
 
 # Invoke claude with a prompt assembled from files + inline instructions
-# Usage: invoke_claude "task description" file1.md file2.md ... <<< "inline prompt"
+# Usage: invoke_claude [--model MODEL] "task description" file1.md file2.md ... <<< "inline prompt"
 invoke_claude() {
+    local model=""
+
+    # Parse optional --model flag
+    if [[ "$1" == "--model" ]]; then
+        model="$2"
+        shift 2
+    fi
+
     local description="$1"
     shift
     local prompt=""
@@ -166,11 +185,19 @@ invoke_claude() {
     fi
 
     log "Invoking Claude: $description"
+    [[ -n "$model" ]] && log "  Model: $model"
     log "  Context files: $*"
+
+    # Build model flag if specified
+    local model_args=()
+    if [[ -n "$model" ]]; then
+        model_args=(--model "$model")
+    fi
 
     # --allowedTools ensures non-interactive execution
     # Unset CLAUDECODE to allow running from within a Claude Code session
     echo "$prompt" | env -u CLAUDECODE claude -p \
+        "${model_args[@]}" \
         --allowedTools "Read,Glob,Grep,Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
         --output-format text \
         2>"${LOG_DIR}/claude_stderr_$(date +%s).log"
@@ -187,7 +214,7 @@ invoke_claude() {
 run_setup() {
     log "═══ Phase Group: Setup (Phases 0a, 0, 1) ═══"
 
-    invoke_claude "Setup & Classification" \
+    invoke_claude --model "$MODEL_SETUP" "Setup & Classification" \
         "$SHARED_CONSTRAINTS" \
         "$WORKFLOW_SETUP" \
         <<EOF
@@ -333,7 +360,7 @@ run_translation() {
             fi
         done
 
-        invoke_claude "Translation batches ${current_batch}-${end_of_group}" \
+        invoke_claude --model "$MODEL_TRANSLATE" "Translation batches ${current_batch}-${end_of_group}" \
             "$SHARED_CONSTRAINTS" \
             "$WORKFLOW_TRANSLATE" \
             "$translator" \
@@ -472,7 +499,7 @@ with open(p,'w') as f: f.write(t)
         log "Continuation fix: $((before - after)) end-of-cue commas → '...', ${after} mid-cue commas kept"
     fi
 
-    invoke_claude "Post-processing (Phases 3-9)" \
+    invoke_claude --model "$MODEL_POST" "Post-processing (Phases 3-9)" \
         "$SHARED_CONSTRAINTS" \
         "$WORKFLOW_POST" \
         "$COMMON_ERRORS" \
@@ -537,12 +564,13 @@ EOF
 
 main() {
     log "╔══════════════════════════════════════════════╗"
-    log "║  srt-translate orchestrator v13              ║"
+    log "║  srt-translate orchestrator v14              ║"
     log "╠══════════════════════════════════════════════╣"
     log "║  Video: $(basename "$VIDEO_FILE")"
     log "║  Skill: ${SKILL_DIR}"
     log "║  Logs:  ${LOG_DIR}"
     log "║  SDH:   $($KEEP_SDH && echo "keep" || echo "remove (default)")"
+    log "║  Models: setup=${MODEL_SETUP} translate=${MODEL_TRANSLATE} post=${MODEL_POST}"
     log "╚══════════════════════════════════════════════╝"
 
     # Determine starting point
