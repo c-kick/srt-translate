@@ -73,9 +73,10 @@ This installs `ffsubsync`, `webrtcvad`, `pysubs2`, and other dependencies into `
 What it does:
 1. Runs setup (Phase 0–1): syncs the English source, runs title card detection, classifies content
 2. Seeds the work pipeline with the existing `.nl.srt` as the translation draft
-3. Runs all post-processing phases (3–9): structural fix, cue merging, CPS optimization, linguistic review, finalization, line balance QC, VAD timing
+3. Runs a **speaker change marker pass** (Opus): reads the EN source and NL draft side-by-side, adds `[SC]`/`[NM]` markers to NL cues where speaker changes occur — no text changes, only markers. This ensures the merge script (Phase 4) doesn't produce false merges across speaker boundaries.
+4. Runs all post-processing phases (3–9): structural fix, cue merging, CPS optimization, linguistic review, finalization, line balance QC, VAD timing
 
-What you gain: merging, timing quality, CPS compliance, grammar fixes, line balance — at roughly **20% of the token cost** of a full retranslation. Translation accuracy issues may persist where they existed in the original, but the linguistic review phase (Phase 6) catches the most egregious errors using the English source as reference.
+What you gain: merging, timing quality, CPS compliance, grammar fixes, line balance — at roughly **30% of the token cost** of a full retranslation. Translation accuracy issues may persist where they existed in the original, but the linguistic review phase (Phase 6) catches the most egregious errors using the English source as reference.
 
 ### Interactive mode
 

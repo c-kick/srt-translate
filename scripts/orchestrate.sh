@@ -443,6 +443,83 @@ EOF
     log "Translation complete. Draft cues: $output_cues (source: $source_cues)"
 }
 
+# ─── Polish: Speaker Change Marker Pass ───────────────────────────────────
+#
+# In --polish mode, Phase 2 (translation) is skipped, so the draft NL file
+# has no [SC]/[NM] markers. Without markers, the merge script (Phase 4)
+# cannot distinguish speaker changes and produces false merges.
+#
+# This pass reads the EN source and NL draft side-by-side and adds [SC]/[NM]
+# markers to the NL cues — no text changes, only marker insertion.
+# Uses Opus for reliability (Sonnet produces fewer [SC] markers).
+
+run_marker_pass() {
+    log "═══ Polish: Speaker Change Marker Pass ═══"
+
+    local source_cues
+    source_cues="$(count_cues "$SOURCE_SRT")"
+    local draft_cues
+    draft_cues="$(count_cues "${WORK_DIR}/draft.nl.srt")"
+    log "  Source: $source_cues EN cues | Draft: $draft_cues NL cues"
+
+    local classification
+    classification="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
+
+    invoke_claude --model "$MODEL_TRANSLATE" "Speaker change marker pass" \
+        "$SHARED_CONSTRAINTS" \
+        <<EOF
+
+## Task — Speaker Change Marker Pass (Polish Mode)
+
+You have an English source SRT and a Dutch translation SRT. Your ONLY job is to
+add \`[SC]\` and \`[NM]\` markers to the Dutch cues. Do NOT change any text,
+timestamps, or cue structure.
+
+**Classification:** ${classification}
+**Genre defaults for [SC]:**
+- Documentary: consecutive cues from the same narrator get NO marker. Mark [SC] at every transition to/from interview subjects, film clips, archival dialogue, voiceover changes.
+- Comedy/fast-unscripted: assume speaker change unless clearly the same speaker. When in doubt, mark [SC].
+- Drama: mark [SC] at every speaker change. When uncertain, prefer [SC] over omitting.
+
+### Rules
+
+1. Read the EN source to understand WHO is speaking in each cue
+2. For each NL cue, determine if the speaker changed from the previous cue
+3. If yes: prepend \`[SC]\` to the NL cue text (before any other text)
+4. If ambiguous: prepend \`[NM]\`
+5. If same speaker continues: do nothing (no marker)
+6. **Do NOT modify any NL text** — only prepend markers
+7. **Do NOT change timestamps or cue numbers**
+8. **Do NOT remove or add cues**
+
+### Process
+
+Work in chunks of ~200 cues:
+1. Extract EN cues with: \`python3 ${SKILL_DIR}/scripts/extract_cues.py ${SOURCE_SRT} --start N --end M --output ${WORK_DIR}/en_chunk.srt\`
+2. Extract NL cues with: \`python3 ${SKILL_DIR}/scripts/extract_cues.py ${WORK_DIR}/draft.nl.srt --start N --end M --output ${WORK_DIR}/nl_chunk.srt\`
+3. Read both chunks, compare speakers, determine markers
+4. Write the marked-up NL chunk back
+
+After processing all chunks, reassemble into ${WORK_DIR}/draft.nl.srt using the Write tool (first chunk) and Edit tool (append subsequent chunks). Verify the final cue count matches the original (${draft_cues}).
+
+**Paths:**
+- EN source: ${SOURCE_SRT}
+- NL draft (read + overwrite): ${WORK_DIR}/draft.nl.srt
+- Scripts dir: ${SKILL_DIR}/scripts
+- Work dir: ${WORK_DIR}
+
+**Working directory:** ${WORK_DIR}
+EOF
+
+    local marked_cues
+    marked_cues="$(count_cues "${WORK_DIR}/draft.nl.srt")"
+    log "Marker pass complete. Draft cues: $marked_cues (was: $draft_cues)"
+
+    if [[ "$marked_cues" -lt $(( draft_cues - 5 )) ]]; then
+        log "WARNING: Marker pass lost cues ($draft_cues → $marked_cues) — this should not happen"
+    fi
+}
+
 # ─── Phase Group: Post-processing (Phases 3-9+) ────────────────────────────
 
 run_postprocessing() {
@@ -655,13 +732,14 @@ main() {
         log "Override: starting from phase group '$start_group'"
     fi
 
-    # --polish: run setup (for SOURCE_SRT + checkpoint), then seed draft from existing nl.srt
+    # --polish: run setup, seed draft, add SC markers, then post-process
     if $POLISH; then
         [[ -f "$OUTPUT_SRT" ]] || die "--polish requires an existing .nl.srt at: $OUTPUT_SRT"
         run_setup
         log "Polish mode: seeding draft from existing translation: $OUTPUT_SRT"
         cp "$OUTPUT_SRT" "${WORK_DIR}/draft.nl.srt"
         log "  Copied → ${WORK_DIR}/draft.nl.srt ($(count_cues "${WORK_DIR}/draft.nl.srt") cues)"
+        run_marker_pass
         run_postprocessing
         return
     fi

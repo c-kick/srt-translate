@@ -40,7 +40,7 @@ The orchestrator invokes Claude in headless mode per phase group, each with a fr
 
 `--polish` upgrades an existing Dutch subtitle without retranslating. Works on any `.nl.srt` — previous skill outputs, older versions, or third-party downloads (OpenSubtitles, Bazarr, etc.).
 
-Runs setup (Phase 0–1) to sync the source and classify content, then seeds the pipeline with the existing `.nl.srt` as the draft and executes all post-processing phases (3–9). Costs roughly **20% of the tokens** of a full retranslation.
+Runs setup (Phase 0–1) to sync the source and classify content, then seeds the pipeline with the existing `.nl.srt` as the draft, runs a speaker change marker pass (Opus) to enable safe merging, and executes all post-processing phases (3–9). Costs roughly **30% of the tokens** of a full retranslation.
 
 ### Phase Groups
 
