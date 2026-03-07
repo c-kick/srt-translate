@@ -94,4 +94,4 @@ For individual phases or review tasks, invoke Claude directly with the relevant 
 
 ## License
 
-Private — not for redistribution.
+[MIT](LICENSE) — © 2026 c_kick/Klaas Leussink

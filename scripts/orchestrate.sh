@@ -196,13 +196,15 @@ invoke_claude() {
 
     # --allowedTools ensures non-interactive execution
     # Unset CLAUDECODE to allow running from within a Claude Code session
-    echo "$prompt" | env -u CLAUDECODE claude -p \
+    # cd to SKILL_DIR so relative paths like scripts/venv/bin/python3 resolve correctly
+    # and Bash(scripts/*) permission pattern matches them regardless of launch cwd.
+    local exit_code
+    (cd "$SKILL_DIR" && echo "$prompt" | env -u CLAUDECODE claude -p \
         "${model_args[@]}" \
         --allowedTools "Read,Glob,Grep,Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
         --output-format text \
-        2>"${LOG_DIR}/claude_stderr_$(date +%s).log"
-
-    local exit_code=$?
+        2>"${LOG_DIR}/claude_stderr_$(date +%s).log")
+    exit_code=$?
     if [[ $exit_code -ne 0 ]]; then
         log "WARNING: Claude exited with code $exit_code for: $description"
     fi

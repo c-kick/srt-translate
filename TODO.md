@@ -63,16 +63,11 @@ Individual phase failures restart the entire phase group. If Phase 6 (linguistic
 
 ## Venv Permission Mismatch in Headless Subprocess
 
-**Symptom:** Phase 4b (trim-to-speech) and Phase 9 (VAD timing) are silently skipped during orchestrated runs with a message like "requires user approval that wasn't granted."
+**FIXED (2026-03-07):** Applied Option 2 — `invoke_claude()` now wraps the headless `claude -p` call in a subshell that `cd`s to `SKILL_DIR`. This ensures relative paths like `scripts/venv/bin/python3` resolve correctly and the existing `Bash(scripts/*)` allowedTools pattern matches them regardless of the launch cwd.
 
-**Root cause:** The orchestrator invokes Claude headless (`claude -p`) as a subprocess. That subprocess runs in a different working directory than the main session (`/mnt/nas/video`). The `settings.local.json` permission entries use both relative paths (`scripts/venv/bin/python3:*`) and absolute paths (`/mnt/nas/video/.claude/skills/srt-translate/scripts/venv/bin/python3:*`), but Claude's permission matching applies to the command string as typed. If the headless Claude runs the command with a path that doesn't exactly match any allow-listed pattern, it blocks and skips.
+~~**Symptom:** Phase 4b (trim-to-speech) and Phase 9 (VAD timing) are silently skipped during orchestrated runs with a message like "requires user approval that wasn't granted."~~
 
-**Evidence:** Cold War S01E01 (2026-03-06) — both VAD phases skipped despite absolute path being in settings.local.json.
-
-**Potential fixes:**
-1. Run all venv python invocations via a thin wrapper script (e.g. `scripts/run-venv.sh <script> <args>`) that is explicitly allow-listed — decouples permission from python path format.
-2. Change orchestrate.sh to `cd` into SKILL_DIR before invoking headless Claude, so relative paths always resolve correctly.
-3. Investigate whether `settings.local.json` is even read by the headless subprocess, or whether it only reads the global `~/.claude/settings.json`.
+**Evidence:** Cold War S01E01 (2026-03-06) — both VAD phases skipped despite absolute path being in settings.local.json. Fix untested on next run (The Neutron Bomb, 2026-03-07).
 
 ## References
 
