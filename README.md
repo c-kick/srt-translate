@@ -57,9 +57,25 @@ This installs `ffsubsync`, `webrtcvad`, `pysubs2`, and other dependencies into `
 |---|---|
 | `--resume` | Resume from last checkpoint |
 | `--fresh` | Delete checkpoint and start from phase 0 |
+| `--polish` | Skip translation — post-process an existing `.nl.srt` (see below) |
 | `--phase N` | Start from phase N |
 | `--speech-sync` | Also run Phase 10 (VAD speech sync) |
 | `--keep-sdh` | Keep SDH cues (default: Claude removes them during translation) |
+
+### Polish mode — upgrade an existing Dutch subtitle
+
+`--polish` skips Phase 2 (translation) entirely and runs post-processing on an existing `.nl.srt` file. It works with any Dutch subtitle — previous translations made with this skill, older versions, or subtitles downloaded from third-party sources like OpenSubtitles or Bazarr.
+
+```bash
+./scripts/orchestrate.sh /path/to/video.mkv --polish
+```
+
+What it does:
+1. Runs setup (Phase 0–1): syncs the English source, runs title card detection, classifies content
+2. Seeds the work pipeline with the existing `.nl.srt` as the translation draft
+3. Runs all post-processing phases (3–9): structural fix, cue merging, CPS optimization, linguistic review, finalization, line balance QC, VAD timing
+
+What you gain: merging, timing quality, CPS compliance, grammar fixes, line balance — at roughly **20% of the token cost** of a full retranslation. Translation accuracy issues may persist where they existed in the original, but the linguistic review phase (Phase 6) catches the most egregious errors using the English source as reference.
 
 ### Interactive mode
 
@@ -71,12 +87,14 @@ For individual phases or review tasks, invoke Claude directly with the relevant 
 |---|---|
 | 0a | OCR extraction (optional, for burned-in subs) |
 | 0 | Source sync via ffsubsync + WebRTC VAD |
+| 0b | Title card detection — downloads foreign subtitle from OpenSubtitles, identifies burned-in cues missing from the English source (requires `OPENSUBTITLES_API_KEY`) |
 | 1 | Content classification (documentary / drama / comedy / fast-unscripted) |
-| 2 | Translation — Claude translates in batches of 100 cues, removes SDH by default |
+| 2 | Translation — Claude translates in batches of 100 cues, removes SDH by default *(skipped in `--polish` mode)* |
 | 3 | Structural fix (line length, overlaps, gap violations) |
 | 4 | Script-based cue merging |
+| 4b | Trim-to-speech — pulls back cue end times that linger past speech using VAD |
 | 5 | CPS optimization (end-time extension + text condensation) |
-| 6 | Linguistic review — grammar, naturalness, register |
+| 6 | Linguistic review — grammar, naturalness, register (uses English source as reference) |
 | 7 | Finalization, renumbering, credit cue |
 | 8 | Line balance QC (orphan words, top-heavy pyramids) |
 | 9 | VAD timing QC against source audio |

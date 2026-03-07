@@ -34,13 +34,20 @@ The orchestrator invokes Claude in headless mode per phase group, each with a fr
 | `--resume` | Resume from last checkpoint |
 | `--phase N` | Start from phase N (0=setup, 2=translate, 3=post) |
 | `--speech-sync` | Also run Phase 10 after Phase 9 |
+| `--polish` | Skip translation — post-process an existing `.nl.srt` instead |
+
+### Polish mode
+
+`--polish` upgrades an existing Dutch subtitle without retranslating. Works on any `.nl.srt` — previous skill outputs, older versions, or third-party downloads (OpenSubtitles, Bazarr, etc.).
+
+Runs setup (Phase 0–1) to sync the source and classify content, then seeds the pipeline with the existing `.nl.srt` as the draft and executes all post-processing phases (3–9). Costs roughly **20% of the tokens** of a full retranslation.
 
 ### Phase Groups
 
 | Group | Phases | Claude context loaded |
 |-------|--------|----------------------|
-| Setup | 0a, 0, 1 | shared-constraints + workflow-setup |
-| Translation | 2 | shared-constraints + workflow-translate + translator + `references/exemplars/*` |
+| Setup | 0a, 0, 0b, 1 | shared-constraints + workflow-setup |
+| Translation | 2 | shared-constraints + workflow-translate + translator + `references/exemplars/*` *(skipped in --polish)* |
 | Post-processing | 3-9, LOG | shared-constraints + workflow-post + common-errors |
 
 Each group runs in a separate Claude invocation = fresh context, zero attention debt.
