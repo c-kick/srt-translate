@@ -214,7 +214,7 @@ invoke_claude() {
 # ─── Phase Group: Setup (Phases 0-1) ───────────────────────────────────────
 
 run_setup() {
-    log "═══ Phase Group: Setup (Phases 0a, 0, 1) ═══"
+    log "═══ Phase Group: Setup (Phases 0a, 0, 0b, 1) ═══"
 
     invoke_claude --model "$MODEL_SETUP" "Setup & Classification" \
         "$SHARED_CONSTRAINTS" \
@@ -228,13 +228,15 @@ Translate the subtitles for this video: ${VIDEO_FILE}
 1. Run pre-flight checks (existing .nl.srt may be overwritten — do NOT ask for confirmation)
 2. Detect and extract source subtitles
 3. Sync source to audio (Phase 0)
-4. Classify content (Phase 1)
-5. Write checkpoint to: ${CHECKPOINT_FILE}
+4. Run title card detection (Phase 0b) — always attempt, silently skip if no API key or timeout
+5. Classify content (Phase 1)
+6. Write checkpoint to: ${CHECKPOINT_FILE}
 
 **Paths:**
 - Video: ${VIDEO_FILE}
 - Source SRT (after sync): ${SOURCE_SRT}
 - Output SRT: ${OUTPUT_SRT}
+- Work dir: ${WORK_DIR}
 - Checkpoint: ${CHECKPOINT_FILE}
 - Scripts dir: ${SKILL_DIR}/scripts
 

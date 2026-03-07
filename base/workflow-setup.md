@@ -51,14 +51,66 @@ python3 scripts/validate_srt.py source.en.srt --verbose
 
 If no embedded subtitles, use external `.en.srt` file.
 
-### Burned-in Subtitle Comparison (supplementary)
+---
 
-When on-screen text needs detecting but OCR is not requested:
-1. Check if other language subtitles available alongside English
-2. Compare to identify entries in other language but not English — likely cover burned-in text
-3. Extract and adapt for Dutch translation
+## Phase 0b: Title Card Detection (automatic)
 
-If no other subtitles present, may download from opensubtitles.org.
+**Always run** after Phase 0 sync, before Phase 1 classification.
+
+Documentaries and historical films often have burned-in English title cards (dates, locations, names) that are absent from the English SRT but present in foreign-language subtitles. This phase detects them by downloading a foreign subtitle from OpenSubtitles and comparing timestamps.
+
+```bash
+scripts/venv/bin/python3 scripts/fetch_title_cards.py \
+    "${VIDEO_BASENAME}.en.srt" \
+    "$VIDEO_FILE" \
+    --output "${WORK_DIR}/title_cards.srt" \
+    --timeout 15
+```
+
+**Exit codes:**
+| Code | Meaning | Action |
+|------|---------|--------|
+| 0 | Title cards found → `title_cards.srt` written | Merge into source (see below) |
+| 1 | No title cards found / no foreign sub available | Continue without changes |
+| 2 | Skipped (no API key, network error, timeout) | Continue without changes; log warning |
+
+**Requires:** `OPENSUBTITLES_API_KEY` env var, or `~/.config/srt-translate/os_api_key` file.
+If neither is present the script exits with code 2 and the phase is silently skipped.
+
+### If title cards found (exit code 0):
+
+Merge the title card cues into the synced English SRT by inserting each cue at the correct timecode position with a `[TITLE CARD]` prefix:
+
+```python
+# Each cue in title_cards.srt: insert into .en.srt at its timecode
+# with text: [TITLE CARD: "<foreign text>"]
+# The foreign text is a hint — translator reads the actual on-screen English,
+# uses the foreign text as a reference to understand what it says.
+python3 -c "
+import pysubs2, sys
+en = pysubs2.load('${VIDEO_BASENAME}.en.srt')
+tc = pysubs2.load('${WORK_DIR}/title_cards.srt')
+for c in tc:
+    import pysubs2 as p
+    ev = p.SSAEvent(start=c.start, end=c.end, text='[TITLE CARD: \"' + c.plaintext.replace('\"','') + '\"]')
+    en.append(ev)
+en.sort()
+en.save('${VIDEO_BASENAME}.en.srt')
+print(f'Merged {len(tc)} title card(s) into source SRT')
+"
+```
+
+**Note in checkpoint:**
+```
+- **Title cards:** N found and merged into source (from [lang] subtitle)
+```
+
+### If no title cards / skipped:
+
+Note in checkpoint:
+```
+- **Title cards:** none detected / skipped
+```
 
 ---
 
