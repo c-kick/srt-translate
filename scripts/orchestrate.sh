@@ -49,6 +49,7 @@ MAX_BATCHES_PER_INVOCATION=6
 
 RESUME=false
 FRESH=false
+POLISH=false
 START_PHASE=""
 SPEECH_SYNC=false
 KEEP_SDH=false
@@ -60,17 +61,21 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --resume)       RESUME=true; shift ;;
         --fresh)        FRESH=true; shift ;;
+        --polish)       POLISH=true; shift ;;
         --phase)        START_PHASE="$2"; shift 2 ;;
         --speech-sync)  SPEECH_SYNC=true; shift ;;
         --keep-sdh)     KEEP_SDH=true; shift ;;
         --keep-work)    KEEP_WORK=true; shift ;;
         --max-batches)  MAX_BATCHES="$2"; shift 2 ;;
         --help|-h)
-            echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--phase N] [--speech-sync] [--keep-sdh] [--max-batches N]"
+            echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--polish] [--phase N] [--speech-sync] [--keep-sdh] [--max-batches N]"
             echo ""
             echo "Options:"
             echo "  --resume        Resume from last checkpoint"
             echo "  --fresh         Delete any checkpoint and start from phase 0 (non-interactive)"
+            echo "  --polish        Skip translation — run post-processing on existing .nl.srt"
+            echo "                  Runs setup (Phase 0-1) then jumps straight to Phase 3."
+            echo "                  Saves ~80%% of token cost vs a full retranslation."
             echo "  --phase N       Start from phase N (0, 2, 3)"
             echo "  --speech-sync   Run Phase 10 (speech sync) after Phase 9"
             echo "  --keep-sdh      Keep SDH cues (default: remove them before translation)"
@@ -574,6 +579,7 @@ main() {
     log "║  Skill: ${SKILL_DIR}"
     log "║  Logs:  ${LOG_DIR}"
     log "║  SDH:   $($KEEP_SDH && echo "keep" || echo "remove (default)")"
+    log "║  Mode:  $($POLISH && echo "--polish (skip translation, post-process existing NL)" || echo "full pipeline")"
     log "║  Models: setup=${MODEL_SETUP} translate=${MODEL_TRANSLATE} post=${MODEL_POST}"
     log "╚══════════════════════════════════════════════╝"
 
@@ -647,6 +653,17 @@ main() {
             *)    die "Invalid phase: $START_PHASE (valid: 0-9)" ;;
         esac
         log "Override: starting from phase group '$start_group'"
+    fi
+
+    # --polish: run setup (for SOURCE_SRT + checkpoint), then seed draft from existing nl.srt
+    if $POLISH; then
+        [[ -f "$OUTPUT_SRT" ]] || die "--polish requires an existing .nl.srt at: $OUTPUT_SRT"
+        run_setup
+        log "Polish mode: seeding draft from existing translation: $OUTPUT_SRT"
+        cp "$OUTPUT_SRT" "${WORK_DIR}/draft.nl.srt"
+        log "  Copied → ${WORK_DIR}/draft.nl.srt ($(count_cues "${WORK_DIR}/draft.nl.srt") cues)"
+        run_postprocessing
+        return
     fi
 
     # Execute phase groups
