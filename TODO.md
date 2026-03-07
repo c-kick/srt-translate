@@ -63,11 +63,30 @@ Individual phase failures restart the entire phase group. If Phase 6 (linguistic
 
 ## Venv Permission Mismatch in Headless Subprocess
 
-**FIXED (2026-03-07):** Applied Option 2 — `invoke_claude()` now wraps the headless `claude -p` call in a subshell that `cd`s to `SKILL_DIR`. This ensures relative paths like `scripts/venv/bin/python3` resolve correctly and the existing `Bash(scripts/*)` allowedTools pattern matches them regardless of the launch cwd.
+**STILL OPEN.** Fix attempted 2026-03-07 (cd to SKILL_DIR) was insufficient — phases still skipped in Das Auto (2026-03-07). Error message changed from "requires user approval" to "no venv", indicating a different failure mode.
 
-~~**Symptom:** Phase 4b (trim-to-speech) and Phase 9 (VAD timing) are silently skipped during orchestrated runs with a message like "requires user approval that wasn't granted."~~
+**Symptom:** Phase 4b (trim-to-speech) and Phase 9 (VAD timing) are silently skipped during orchestrated headless runs.
 
-**Evidence:** Cold War S01E01 (2026-03-06) — both VAD phases skipped despite absolute path being in settings.local.json. Fix untested on next run (The Neutron Bomb, 2026-03-07).
+**History:**
+- Cold War S01E01 (2026-03-06): skipped with "requires user approval that wasn't granted"
+- Das Auto (2026-03-07): skipped with "no venv" after cd-fix was applied
+
+**Root cause (updated analysis):**
+Two compounding problems:
+
+1. **Pattern depth:** `Bash(scripts/*)` in `--allowedTools` may only match one path level deep (i.e. `scripts/foo` but not `scripts/venv/bin/python3`). Whether Claude's permission system treats `*` as a recursive glob or single-level is unverified.
+
+2. **cwd conflict:** The `cd "$SKILL_DIR"` fix sets the subprocess cwd to SKILL_DIR, which helps with permission pattern matching — but the workflow-post.md uses relative paths for work files (e.g. `merged.nl.srt`, `trimmed.nl.srt`) that are relative to WORK_DIR. With cwd=SKILL_DIR these paths break, causing the venv script to fail silently. Claude interprets the failure as "no venv" and falls back to copying.
+
+These two problems are in tension: permission matching wants cwd=SKILL_DIR; work file paths want cwd=WORK_DIR.
+
+**Recommended fix:** Option 1 (wrapper script) from the original list.
+Create `scripts/run-venv.sh` — a thin wrapper that calls the venv python using its absolute path:
+```bash
+#!/usr/bin/env bash
+exec "$(dirname "${BASH_SOURCE[0]}")/venv/bin/python3" "$@"
+```
+Add `Bash(scripts/run-venv.sh:*)` to `--allowedTools`. Update workflow-post.md to call `scripts/run-venv.sh` instead of `scripts/venv/bin/python3`. This is cwd-agnostic and single-level, so it matches cleanly regardless of whether cwd is SKILL_DIR or WORK_DIR.
 
 ## References
 
