@@ -143,35 +143,35 @@ cd /mnt/nas/video/.claude/skills/srt-translate
 # Comedy Pipeline
 # Test 1: Translation (requires Claude subagent)
 # Test 2: Merge
-scripts/venv/bin/python3 scripts/auto_merge_cues.py \
+scripts/run-venv.sh scripts/auto_merge_cues.py \
   draft.nl.srt \
   --gap-threshold 800 --max-duration 6000 \
   --output merged.nl.srt \
   --report merge_report.json
 # Test 3: Validation
-scripts/venv/bin/python3 scripts/validate_srt.py merged.nl.srt --fps 25
+scripts/run-venv.sh scripts/validate_srt.py merged.nl.srt --fps 25
 
 # Documentary Pipeline
 # Test 4: Translation (requires Claude subagent)
 # Test 5: Merge
-scripts/venv/bin/python3 scripts/auto_merge_cues.py \
+scripts/run-venv.sh scripts/auto_merge_cues.py \
   draft.nl.srt \
   --gap-threshold 1000 --max-duration 7000 \
   --output merged.nl.srt \
   --report merge_report.json
 # Test 6: Validation
-scripts/venv/bin/python3 scripts/validate_srt.py merged.nl.srt --fps 25
+scripts/run-venv.sh scripts/validate_srt.py merged.nl.srt --fps 25
 
 # Drama Pipeline
 # Test 7: Translation (requires Claude subagent)
 # Test 8: Merge
-scripts/venv/bin/python3 scripts/auto_merge_cues.py \
+scripts/run-venv.sh scripts/auto_merge_cues.py \
   draft.nl.srt \
   --gap-threshold 1000 --max-duration 7000 \
   --output merged.nl.srt \
   --report merge_report.json
 # Test 9: Validation
-scripts/venv/bin/python3 scripts/validate_srt.py merged.nl.srt --fps 24
+scripts/run-venv.sh scripts/validate_srt.py merged.nl.srt --fps 24
 ```
 
 After merge, Phase 6 (Linguistic Review) should be run to verify merge boundary correctness — see `workflow-post.md`.

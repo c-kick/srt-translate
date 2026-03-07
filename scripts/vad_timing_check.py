@@ -11,18 +11,18 @@ Performance: Audio extraction ~20s (cached), full VAD ~3s, analysis < 1s.
 Always runs on all cues — no selective mode needed.
 
 Usage:
-    venv/bin/python3 scripts/vad_timing_check.py VIDEO NL_SRT EN_SRT [options]
+    scripts/run-venv.sh scripts/vad_timing_check.py VIDEO NL_SRT EN_SRT [options]
 
 Examples:
     # Standard QC
-    venv/bin/python3 scripts/vad_timing_check.py movie.mkv movie.nl.srt movie.en.srt
+    scripts/run-venv.sh scripts/vad_timing_check.py movie.mkv movie.nl.srt movie.en.srt
 
     # Stricter detection, save report
-    venv/bin/python3 scripts/vad_timing_check.py movie.mkv movie.nl.srt movie.en.srt \\
+    scripts/run-venv.sh scripts/vad_timing_check.py movie.mkv movie.nl.srt movie.en.srt \\
         --threshold 300 --report logs/vad_report.json
 
     # More aggressive noise filtering
-    venv/bin/python3 scripts/vad_timing_check.py movie.mkv movie.nl.srt movie.en.srt \\
+    scripts/run-venv.sh scripts/vad_timing_check.py movie.mkv movie.nl.srt movie.en.srt \\
         --aggressiveness 3
 """
 import argparse

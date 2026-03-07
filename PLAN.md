@@ -212,7 +212,7 @@ Add between Phase 4 and Phase 5:
 Pulls back cue end times that linger past speech boundaries.
 
 ```bash
-scripts/venv/bin/python3 scripts/trim_to_speech.py \
+scripts/run-venv.sh scripts/trim_to_speech.py \
     "$VIDEO_FILE" \
     merged.nl.srt \
     --output trimmed.nl.srt \
@@ -268,15 +268,15 @@ That's it. No conditional logic, no Phase 10 auto-skip, no report validation in 
 
 ```bash
 # 1. Trim
-scripts/venv/bin/python3 scripts/trim_to_speech.py \
+scripts/run-venv.sh scripts/trim_to_speech.py \
     helvetica.mkv merged.nl.srt \
     --output trimmed.nl.srt --fps 25 --report trim_report.json -v
 
 # 2. Structural integrity check
-scripts/venv/bin/python3 scripts/validate_srt.py trimmed.nl.srt --summary
+scripts/run-venv.sh scripts/validate_srt.py trimmed.nl.srt --summary
 
 # 3. Re-run Phase 9 QC
-scripts/venv/bin/python3 scripts/vad_timing_check.py \
+scripts/run-venv.sh scripts/vad_timing_check.py \
     helvetica.mkv trimmed.nl.srt helvetica.en.srt \
     --report trimmed_vad.json
 
