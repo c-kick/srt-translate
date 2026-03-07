@@ -1,4 +1,4 @@
-# Analysis: PocketSphinx Timing QC (TODO.md)
+# Analysis: Timing QC — NL→EN Cue Mapping
 
 ## Summary of the Issue
 
@@ -19,7 +19,7 @@ When Claude translates English subtitles to Dutch, it often redistributes conten
 
 The current system can detect "subtitle ends but speech continues" or "subtitle starts before speech." It **cannot** detect "this subtitle's content corresponds to speech happening 3 seconds away" because it has no word-level timestamp data.
 
-## TODO.md Proposal Analysis
+## Original Proposal Analysis
 
 ### Step 1: Forced-align English source (PocketSphinx)
 
