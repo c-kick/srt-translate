@@ -153,7 +153,7 @@ Often omittable if visually clear (nodding).
 - Second speaker: dash, no space (`-`)
 - Third speaker (same cue): first line dash without space (` -`), second line dash no space (`-`)
 - Contractions: use liberally
-- Informal register default
+- Informal register default (see `references/register-guide.md` for base je/u rules)
 - Sentence fragments: acceptable
 
 ---

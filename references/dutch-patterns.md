@@ -154,43 +154,9 @@ Use contractions sparingly. Only two are standard in subtitles:
 
 ---
 
-## Register Guidance (je/u)
+## Register (je/u)
 
-### Core rule: je is the default
-
-Dutch subtitling uses *je/jij* unless there is a clear reason for *u*. When in doubt, use *je*.
-
-### Always je/jij:
-
-| Relationship | Reason |
-|-------------|--------|
-| Spouses, partners | Intimate relationship — NEVER u |
-| Family members (siblings, parent↔child) | Family bond |
-| Close friends | Familiar relationship |
-| Colleagues at same level | Peer relationship |
-| Staff among themselves | Informal workplace |
-| Boss → employee | Downward hierarchy |
-| Adult → child | Age difference (downward) |
-
-### Always u/uw:
-
-| Relationship | Reason |
-|-------------|--------|
-| Service provider → customer/guest | Professional courtesy |
-| Employee → unfamiliar superior | Upward hierarchy |
-| Strangers in formal setting | Social distance |
-| Addressing elderly (by younger stranger) | Respect |
-| Professional titles (doctor, lawyer) | Formal role |
-
-### Context-dependent:
-
-| Relationship | Guidance |
-|-------------|----------|
-| Employee → familiar boss | Match source register — may be je if relationship is informal |
-| Strangers in casual setting | Often starts u, may shift to je |
-| Child → parent | Usually je in modern Dutch; u only if period piece or very formal family |
-
-**Maintain T-V consistency** per character relationship throughout. Record every T-V decision in the batch context so it carries across batches.
+See `references/register-guide.md` for the canonical je/u register rules (always-je, always-u, context-dependent, register shifts, consistency tracking).
 
 ---
 

@@ -37,17 +37,10 @@ python3 scripts/auto_merge_cues.py draft.nl.srt \
 ## Style Rules
 
 ### Register
-- Match character's voice
-- Maintain consistency per character
-- Track T-V (je/u) per relationship
-
-| Relationship | Register |
-|--------------|----------|
-| Friends | je/jij |
-| Strangers (initial) | often u |
-| Boss-employee | varies by scene |
-| Parent-child | usually je |
-| Formal settings | u |
+See `references/register-guide.md` for je/u rules. Drama-specific notes:
+- Match character's voice — register is a characterization tool
+- Track T-V per relationship in batch context
+- Register shifts (u → je) can signal changing dynamics between characters
 
 ### Contractions
 Only two contractions are standard in subtitles (Auteursbond). See `references/dutch-patterns.md` for full rules.

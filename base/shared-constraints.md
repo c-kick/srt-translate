@@ -174,7 +174,7 @@ This contextual grouping determines two things:
 
 #### 1. Register and pronoun choices
 
-The translator must identify the actual characters behind A and B to decide on je/jij vs. u, tone, and style. The A/B labels from the utterance grouping do not carry this information — only the sentence content does.
+The translator must identify the actual characters behind A and B to decide on je/jij vs. u, tone, and style (see `references/register-guide.md`). The A/B labels from the utterance grouping do not carry this information — only the sentence content does.
 
 #### 2. Merge eligibility and `[SC]` placement
 

@@ -1,7 +1,7 @@
 # Exemplars: Dual Speaker & Dialogue Formatting
 
 Gold-standard EN→NL pairs demonstrating multi-speaker cue construction.
-Source: The Remains of the Day (1993) — professional NL broadcast subtitles.
+Sources: The Remains of the Day (1993), Fawlty Towers S01E06 (1975) — verified NL translations.
 
 ---
 
@@ -80,3 +80,94 @@ If either speaker's text exceeds ~35 characters, splitting across cues is better
 
 ### Attribution must be clear
 Never create a dual-speaker cue where it's unclear who says which line. If the scene has three speakers and two could plausibly say either line, use separate cues.
+
+---
+
+## Merge Script Output Format (Fawlty Towers S01E06)
+
+These examples show the exact format `auto_merge_cues.py` produces from `[SC]` markers. The merge script joins two cues with `\n-` — first line has no dash, second line starts with `-` (no space after dash).
+
+### Sentence-boundary split — two speakers, clean break
+EN: "That's not blue." / "It's got blue things on it."
+NL:
+```
+Die is niet blauw.
+-Er zitten blauwe dingen op.
+```
+WHY: Each speaker gets one complete sentence. Clean split at the sentence boundary. First line: no dash. Second line: `-` immediately followed by text.
+
+### Question + terse reply — comedy pacing
+EN: "You still here?" / "Apparently."
+NL:
+```
+Bent u er nog?
+-Kennelijk.
+```
+WHY: Short question, shorter answer. The dual-speaker cue preserves comedic timing — a standalone "Kennelijk." cue would waste screen time and kill the punchline.
+
+### Instruction + exasperated response
+EN: "And will you get me my phone book, please?" / "Like I don't have enough to do."
+NL:
+```
+Pak je m'n telefoonboek?
+-Alsof ik niet genoeg te doen heb.
+```
+WHY: Request + complaint in one cue. Register contrast: Sybil's casual "pak je" vs Basil's sarcastic retort. Note "please" dropped — subtitling economy.
+
+### Statement + contradiction — rapid back-and-forth
+EN: "No, no dogs in here." / "I wouldn't bet on it."
+NL:
+```
+Nee, geen honden hier.
+-Dat zou ik niet zeggen.
+```
+WHY: Denial + undercut. The two lines play off each other — separating them would lose the comedic contrast.
+
+### Formal register in dual-speaker (nurse + patient)
+EN: "Let's sit you up a bit." / "Thank you, sister."
+NL:
+```
+Ik help u even overeind.
+-Dank u, zuster.
+```
+WHY: Both speakers use u — formal hospital setting. "Sister" → "zuster" (Dutch term for nurse). Register consistency even within a dual-speaker cue.
+
+---
+
+## Negative Examples — What NOT to Do
+
+### WRONG: Dash on first line
+```
+-Wat zeg je?
+-Red je het wel?
+```
+CORRECT:
+```
+Wat zeg je?
+-Red je het wel?
+```
+WHY: First line NEVER starts with a dash. Only the second speaker gets a dash. Two dashes implies three speakers (one before the cue, two inside it).
+
+### WRONG: Same speaker formatted as dual-speaker
+```
+Het is niet smerig.
+-Het is prachtig.
+```
+CORRECT:
+```
+Het is niet smerig,
+het is prachtig.
+```
+WHY: Same speaker, same sentence. The dash falsely signals a speaker change. Without `[SC]`, the merge script would join these with a space: "Het is niet smerig, het is prachtig." — which is correct.
+
+### WRONG: Space after dash
+```
+Die is niet blauw.
+- Er zitten blauwe dingen op.
+```
+CORRECT:
+```
+Die is niet blauw.
+-Er zitten blauwe dingen op.
+```
+WHY: Auteursbond standard: no space after the dash. `-Text`, not `- Text`.

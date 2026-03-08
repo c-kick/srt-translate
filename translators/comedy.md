@@ -134,7 +134,7 @@ Keep short:
 
 - Second speaker dash only (same as drama)
 - Contractions: m'n and z'n only (see dutch-patterns.md)
-- Informal register unless character is formal
+- Informal register unless character is explicitly formal (see `references/register-guide.md` for base je/u rules)
 
 ### Speaker Change Markers — Comedy Priority
 
