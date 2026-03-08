@@ -12,34 +12,6 @@
 
 ---
 
-## Phase 0a: OCR Extraction (optional)
-
-**When:** User mentions burned-in subtitles, hardcoded text, or OCR — or no text-based English subs exist and the video has burned-in English text.
-
-```bash
-cd ~/video-subtitle-extractor && ~/vse-env/bin/python extract_burned_subs.py \
-    "$VIDEO_FILE" \
-    --output "${VIDEO_BASENAME}.ocr.en.srt" \
-    --lang en \
-    --interval 1
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--lang` | `en` | OCR language |
-| `--interval` | `1` | Sampling interval in seconds |
-| `--start` / `--end` | - | Limit to time range (seconds) |
-| `--y1 --y2` | bottom 25% of frame (1080p) | Subtitle region Y coordinates |
-
-**Performance:** ~3.7 fps on CPU (i3-13100T). A 100-min video takes ~27 minutes.
-
-**After OCR completes:**
-- Review output — OCR picks up scene text (logos, credits) as noise. Remove non-subtitle entries.
-- **If OCR is primary source** (no text-based English subs): use `.ocr.en.srt` for Phase 2. **Skip Phase 0** — OCR timestamps are frame-accurate.
-- **If OCR supplements existing source**: translate regular source normally, translate OCR'd entries separately, merge into final `.nl.srt`.
-
----
-
 ## Source Detection
 
 **Embedded text-based (not VOBSUB) subtitles preferred** (correct timing):
@@ -232,7 +204,6 @@ After classification, write checkpoint to `$CHECKPOINT_FILE`:
 - **Framerate:** [24 or 25]
 - **Classification:** [documentary/drama/comedy/fast-unscripted]
 - **Source cues:** [count]
-- **OCR used:** [yes/no]
 - **Sync offset:** [Nms]
 
 ## Terminology
