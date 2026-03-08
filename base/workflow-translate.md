@@ -121,6 +121,17 @@ NL 61: en moderne industrie enerzijds...
 
 **CRITICAL: Write each batch directly to the output file. NEVER output translated cues to the terminal.**
 
+### Continuation invocations
+
+If the prompt contains an **Invocation Handoff** section, this is a continuation — a previous Claude instance already translated earlier batches. Read the handoff carefully:
+
+- Check "Speaker change on last cue" to decide if your first cue needs `[SC]`.
+- Read the dialogue context lines to understand the conversation flow.
+- Read the glossary and previous batch context for terminology and register continuity.
+- If speaker change is "unclear", place `[SC]` on your first cue (conservative default).
+
+### Batch extraction
+
 Process **100 cues per batch** sequentially. Extract only the current batch before translating:
 
 ```bash
@@ -162,12 +173,22 @@ After each batch, write to `$BATCH_CONTEXT_DIR/batch{N}_context.md`:
 ## Register (T-V per speaker)
 ## Recurring Phrases
 ## Speaker Changes
-- [SC] markers placed: N (list cue numbers with brief reason, e.g. "cue 45: Basil→Sybil")
-- Last speaker at batch end: [character name]
+- [SC] markers placed: N (list cue numbers with brief reason, e.g. "cue 45: narrator→interviewee")
+## Batch Boundary  <!-- extracted by orchestrate.sh for invocation handoff -->
+- Last cue index: [N]
+- Speaker change on last cue: [yes/no/unclear]
+- Last 2 lines of dialogue: [quote last 2 lines for context]
+- Notes: [optional, e.g. "rapid back-and-forth dialogue" or "monologue continues"]
 ## Notes
 ```
 
-The **Speaker Changes** section is critical for batch continuity — the next batch must know who was speaking at the end of the previous batch to correctly place `[SC]` on its first cue.
+The **Batch Boundary** section is critical for batch continuity. It tells the next batch whether a speaker change occurred on the final cue — a boolean, not a name. The next batch uses this to decide whether its first cue needs `[SC]`.
+
+- **yes**: the last cue had a different speaker than the cue before it.
+- **no**: the last cue continued from the same speaker.
+- **unclear**: ambiguous — treat as `[SC]` (conservative: a missed merge is better than a false merge).
+
+Character names may appear in the Speaker Changes log as informational notes to help the translator understand dialogue flow, but they are not structural data and are never parsed by scripts.
 
 ### Cumulative glossary
 

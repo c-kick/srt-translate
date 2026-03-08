@@ -111,6 +111,7 @@ OUTPUT_SRT="${VIDEO_DIR}/${VIDEO_BASENAME}.nl.srt"
 SOURCE_SRT="${VIDEO_DIR}/${VIDEO_BASENAME}.en.srt"
 WORK_DIR="${LOG_DIR}/work_${VIDEO_BASENAME}"
 GLOSSARY_FILE="${WORK_DIR}/translation_glossary.md"
+HANDOFF_FILE="${BATCH_CONTEXT_DIR}/invocation_handoff.txt"
 
 mkdir -p "$LOG_DIR" "$BATCH_CONTEXT_DIR" "$WORK_DIR"
 
@@ -370,6 +371,17 @@ run_translation() {
             fi
         done
 
+        # Load invocation handoff from previous group (if continuation)
+        local handoff_context=""
+        if [[ $current_batch -gt 1 ]]; then
+            if [[ -f "$HANDOFF_FILE" ]]; then
+                handoff_context="$(cat "$HANDOFF_FILE")"
+                log "Loaded invocation handoff from previous group"
+            else
+                log "WARNING: Continuation invocation without handoff file — speaker change state unknown at boundary"
+            fi
+        fi
+
         # Load cumulative glossary (persists across all invocations)
         local glossary_content=""
         if [[ -f "$GLOSSARY_FILE" ]]; then
@@ -425,6 +437,18 @@ else
     echo "No glossary yet — you will create it after your first batch."
 fi)
 
+## Invocation Handoff
+
+$(if [[ -n "$handoff_context" ]]; then
+    echo "**This is a continuation invocation.** The previous invocation ended with this state:"
+    echo ""
+    echo "$handoff_context"
+    echo ""
+    echo "Use this to determine whether the first cue in your first batch needs an [SC] marker."
+else
+    echo "First invocation — no handoff from a previous invocation."
+fi)
+
 ## Previous Batch Context
 
 $(if [[ -n "$prev_context" ]]; then
@@ -446,6 +470,16 @@ $(cat "$CHECKPOINT_FILE")
 5. After each batch, update the cumulative glossary at ${GLOSSARY_FILE} (see workflow instructions)
 6. After the last batch in this group, update the checkpoint: ${CHECKPOINT_FILE}
 EOF
+
+        # Write invocation handoff from last batch context of this group
+        # Uses full batch context (read by Claude, not parsed by scripts — KISS)
+        local last_ctx="${BATCH_CONTEXT_DIR}/batch${end_of_group}_context.md"
+        if [[ -f "$last_ctx" ]]; then
+            cp "$last_ctx" "$HANDOFF_FILE"
+            log "Wrote invocation handoff from batch ${end_of_group}"
+        else
+            log "WARNING: No batch context file for batch ${end_of_group} — cannot write handoff"
+        fi
 
         current_batch=$(( end_of_group + 1 ))
     done
