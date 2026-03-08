@@ -27,7 +27,7 @@ from pathlib import Path
 try:
     import pysubs2
 except ImportError:
-    print("ERROR: pysubs2 not available — run via scripts/venv/bin/python3", file=sys.stderr)
+    print("ERROR: pysubs2 not available — run via scripts/run-venv.sh", file=sys.stderr)
     sys.exit(2)
 
 API_BASE = "https://api.opensubtitles.com/api/v1"

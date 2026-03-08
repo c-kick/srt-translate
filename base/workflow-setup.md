@@ -60,7 +60,7 @@ If no embedded subtitles, use external `.en.srt` file.
 Documentaries and historical films often have burned-in English title cards (dates, locations, names) that are absent from the English SRT but present in foreign-language subtitles. This phase detects them by downloading a foreign subtitle from OpenSubtitles and comparing timestamps.
 
 ```bash
-scripts/venv/bin/python3 scripts/fetch_title_cards.py \
+scripts/run-venv.sh scripts/fetch_title_cards.py \
     "${VIDEO_BASENAME}.en.srt" \
     "$VIDEO_FILE" \
     --output "${WORK_DIR}/title_cards.srt" \
@@ -132,14 +132,14 @@ Classify: `< 24.5` → **24**, `≥ 24.5` → **25**. Include in checkpoint.
 
 ```bash
 # Sync external SRT
-scripts/venv/bin/python3 scripts/sync_subtitles.py "$VIDEO_FILE" source.en.srt \
+scripts/run-venv.sh scripts/sync_subtitles.py "$VIDEO_FILE" source.en.srt \
     -o "${VIDEO_BASENAME}.en.srt" -v
 
 # List embedded subtitle streams
-scripts/venv/bin/python3 scripts/sync_subtitles.py "$VIDEO_FILE" --list-streams
+scripts/run-venv.sh scripts/sync_subtitles.py "$VIDEO_FILE" --list-streams
 
 # Sync embedded stream
-scripts/venv/bin/python3 scripts/sync_subtitles.py "$VIDEO_FILE" --stream 0:s:0 \
+scripts/run-venv.sh scripts/sync_subtitles.py "$VIDEO_FILE" --stream 0:s:0 \
     -o "${VIDEO_BASENAME}.en.srt" -v
 ```
 

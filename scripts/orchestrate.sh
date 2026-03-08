@@ -201,7 +201,7 @@ invoke_claude() {
 
     # --allowedTools ensures non-interactive execution
     # Unset CLAUDECODE to allow running from within a Claude Code session
-    # cd to SKILL_DIR so relative paths like scripts/venv/bin/python3 resolve correctly
+    # cd to SKILL_DIR so relative paths like scripts/run-venv.sh resolve correctly
     # and Bash(scripts/*) permission pattern matches them regardless of launch cwd.
     local exit_code
     (cd "$SKILL_DIR" && echo "$prompt" | env -u CLAUDECODE claude -p \

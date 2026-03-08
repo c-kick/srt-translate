@@ -132,7 +132,7 @@ If dual-speaker count is **below the expected range**, the translator likely mis
 Pulls back cue end times that linger past speech boundaries. Uses VAD (same approach as Phase 9) to detect where speech actually ends and trims accordingly, guarded by CPS constraints.
 
 ```bash
-scripts/venv/bin/python3 scripts/trim_to_speech.py \
+scripts/run-venv.sh scripts/trim_to_speech.py \
     "$VIDEO_FILE" \
     merged.nl.srt \
     --output trimmed.nl.srt \
@@ -312,7 +312,7 @@ python3 scripts/check_line_balance.py "${VIDEO_BASENAME}.nl.srt" --fix
 Checks subtitle timing against actual speech via WebRTC VAD.
 
 ```bash
-scripts/venv/bin/python3 scripts/vad_timing_check.py \
+scripts/run-venv.sh scripts/vad_timing_check.py \
     "$VIDEO_FILE" \
     "${VIDEO_BASENAME}.nl.srt" \
     "${VIDEO_BASENAME}.en.srt" \
@@ -344,7 +344,7 @@ scripts/venv/bin/python3 scripts/vad_timing_check.py \
 **When:** Content with slow speakers where subtitles disappear before speaker finishes.
 
 ```bash
-scripts/venv/bin/python3 scripts/extend_to_speech_lite.py \
+scripts/run-venv.sh scripts/extend_to_speech_lite.py \
     "$VIDEO_FILE" \
     "${VIDEO_BASENAME}.nl.srt" \
     -o "${VIDEO_BASENAME}.nl.srt" \
