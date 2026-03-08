@@ -285,7 +285,7 @@ def main():
         global CPS_SOFT_CEILING
         from srt_constants import get_constraints
         c = get_constraints(args.fps, 'nl')
-        CPS_SOFT_CEILING = c['cps_hard_limit']
+        CPS_SOFT_CEILING = c['cps_soft_ceiling']
 
     cues, _errors = parse_srt_file(args.srt_file)
     two_line = [c for c in cues if len(c.text.split('\n')) == 2

@@ -12,9 +12,9 @@ To regenerate the markdown table in shared-constraints.md:
 
 _NL_CONSTRAINTS = {
     24: {
-        'cps_optimal': 11,
-        'cps_hard_limit': 15,
-        'cps_emergency_max': 20,
+        'cps_optimal': 11,       # Target comfortable reading speed
+        'cps_soft_ceiling': 15,  # Extend end time before flagging
+        'cps_hard_limit': 20,    # Condense text — extension alone insufficient
         'max_chars_per_line': 42,
         'max_duration_ms': 7007,
         'min_duration_ms': 1400,
@@ -24,9 +24,9 @@ _NL_CONSTRAINTS = {
         'unbreak_threshold': 40,
     },
     25: {
-        'cps_optimal': 12,
-        'cps_hard_limit': 17,
-        'cps_emergency_max': 20,
+        'cps_optimal': 12,       # Target comfortable reading speed
+        'cps_soft_ceiling': 17,  # Extend end time before flagging
+        'cps_hard_limit': 20,    # Condense text — extension alone insufficient
         'max_chars_per_line': 42,
         'max_duration_ms': 7000,
         'min_duration_ms': 830,
@@ -40,8 +40,8 @@ _NL_CONSTRAINTS = {
 _EN_CONSTRAINTS = {
     24: {
         'cps_optimal': 15,
+        'cps_soft_ceiling': 20,
         'cps_hard_limit': 20,
-        'cps_emergency_max': 20,
         'max_chars_per_line': 42,
         'max_duration_ms': 7007,
         'min_duration_ms': 1000,
@@ -51,8 +51,8 @@ _EN_CONSTRAINTS = {
     },
     25: {
         'cps_optimal': 15,
+        'cps_soft_ceiling': 20,
         'cps_hard_limit': 20,
-        'cps_emergency_max': 20,
         'max_chars_per_line': 42,
         'max_duration_ms': 7000,
         'min_duration_ms': 1000,
@@ -67,11 +67,11 @@ _EN_CONSTRAINTS = {
 # Used by scripts that don't take --fps; overridden at runtime when fps is known.
 MAX_LINES = _NL_CONSTRAINTS[25]['max_lines']
 MAX_CHARS_PER_LINE = _NL_CONSTRAINTS[25]['max_chars_per_line']
-CPS_SOFT_CEILING = _NL_CONSTRAINTS[25]['cps_hard_limit']
+CPS_SOFT_CEILING = _NL_CONSTRAINTS[25]['cps_soft_ceiling']
 MAX_DURATION_MS = 8000  # lenient default; fps-aware scripts use get_constraints()
 
 NL_CPS_TARGET = _NL_CONSTRAINTS[25]['cps_optimal']
-NL_CPS_HARD_LIMIT = _NL_CONSTRAINTS[25]['cps_emergency_max']
+NL_CPS_HARD_LIMIT = _NL_CONSTRAINTS[25]['cps_hard_limit']
 NL_MIN_GAP_MS = _NL_CONSTRAINTS[25]['min_gap_ms']
 NL_MIN_DURATION_MS = _NL_CONSTRAINTS[25]['min_duration_ms']
 NL_MAX_WORDS_PER_MIN = _NL_CONSTRAINTS[25]['max_words_per_min']
@@ -124,9 +124,9 @@ def generate_markdown_table():
     nl25 = _NL_CONSTRAINTS[25]
 
     rows = [
-        ('CPS Optimal',          str(nl24['cps_optimal']),      str(nl25['cps_optimal'])),
+        ('CPS Target',           str(nl24['cps_optimal']),       str(nl25['cps_optimal'])),
+        ('CPS Soft Ceiling',     str(nl24['cps_soft_ceiling']), str(nl25['cps_soft_ceiling'])),
         ('CPS Hard Limit',       str(nl24['cps_hard_limit']),   str(nl25['cps_hard_limit'])),
-        ('CPS Emergency Maximum', str(nl24['cps_emergency_max']), str(nl25['cps_emergency_max'])),
         ('Characters per line',  str(nl24['max_chars_per_line']), str(nl25['max_chars_per_line'])),
         ('Maximum cue duration', f"{nl24['max_duration_ms']}ms", f"{nl25['max_duration_ms']}ms"),
         ('Minimum cue duration', f"{nl24['min_duration_ms']}ms", f"{nl25['min_duration_ms']}ms"),

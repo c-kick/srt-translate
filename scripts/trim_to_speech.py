@@ -296,8 +296,8 @@ Examples:
 
     # Load constraints
     constraints = get_constraints(args.fps)
-    cps_soft_ceiling = constraints['cps_hard_limit']
-    cps_hard_limit = constraints['cps_emergency_max']
+    cps_soft_ceiling = constraints['cps_soft_ceiling']
+    cps_hard_limit = constraints['cps_hard_limit']
     min_duration_ms = constraints['min_duration_ms']
     min_gap_ms = constraints['min_gap_ms']
 

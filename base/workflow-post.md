@@ -193,12 +193,12 @@ python3 scripts/extend_end_times.py trimmed.nl.srt \
   -o trimmed.nl.srt
 ```
 
-### Step 1: Extend End Times (ALL cues with CPS > 13)
+### Step 1: Extend End Times (ALL cues with CPS > CPS target)
 
-**This is the primary CPS tool.** For EVERY cue with CPS above 13, extend the end time to fill the available gap before the next cue. Target CPS: **12.5**.
+**This is the primary CPS tool.** For EVERY cue with CPS above the CPS target (fps-dependent: 11 at 24fps, 12 at 25fps), extend the end time to fill the available gap before the next cue. Target CPS: **12** (25fps) / **11** (24fps).
 
 ```
-For each cue where CPS > 13:
+For each cue where CPS > CPS target:
   available_gap = next_cue_start - current_cue_end
   if available_gap > ${MIN_GAP}ms:
     extend end time, leaving ${MIN_GAP}ms minimum gap
@@ -207,12 +207,12 @@ For each cue where CPS > 13:
 
 This is a mechanical operation. Do it for ALL qualifying cues, not just outliers. The user's expectation is CPS 12-12.5 wherever display time permits.
 
-### Step 2: Text Condensation (only for CPS still > CPS hard limit after extension)
+### Step 2: Text Condensation (only for CPS still > CPS soft ceiling after extension)
 
-After extending all end times, some cues will still exceed the CPS hard limit (fps-dependent: 15 at 24fps, 17 at 25fps) because there's no gap to extend into. Only THEN condense text:
+After extending all end times, some cues will still exceed the CPS soft ceiling (fps-dependent: 15 at 24fps, 17 at 25fps) because there's no gap to extend into. Only THEN condense text:
 
-- **CPS hard limit to 20:** condense if possible without losing meaning
-- **CPS > 20:** must condense (emergency — meaning loss acceptable)
+- **CPS soft ceiling to hard limit (20):** condense if possible without losing meaning
+- **CPS > hard limit (20):** must condense (emergency — meaning loss acceptable)
 
 **Condensation priority order** (try each before the next):
 1. **Drop trivial replies** — if a dual-speaker cue's second line is a trivial acknowledgment (`Ja.`, `Nee.`, `Oké.`, `Goed.`, `Precies.`, `Klopt.`, etc.), drop the second line and convert to single-speaker. The viewer hears these — subtitling them adds characters without information. This is the cheapest CPS reduction.

@@ -11,9 +11,9 @@ Values depend on the source framerate. Determine framerate before starting.
 <!-- BEGIN GENERATED CONSTRAINTS -->
 | Constraint | 23.976 / 24 fps | 25 fps |
 |---|---|---|
-| CPS Optimal | 11 | 12 |
-| CPS Hard Limit | 15 | 17 |
-| CPS Emergency Maximum | 20 | 20 |
+| CPS Target | 11 | 12 |
+| CPS Soft Ceiling | 15 | 17 |
+| CPS Hard Limit | 20 | 20 |
 | Characters per line | 42 | 42 |
 | Maximum cue duration | 7007ms | 7000ms |
 | Minimum cue duration | 1400ms | 830ms |

@@ -648,8 +648,8 @@ def main():
     if args.fps:
         c = get_constraints(args.fps, 'nl')
         CPS_TARGET = c['cps_optimal']
-        CPS_SOFT_CEILING = c['cps_hard_limit']
-        CPS_HARD_LIMIT = c['cps_emergency_max']
+        CPS_SOFT_CEILING = c['cps_soft_ceiling']
+        CPS_HARD_LIMIT = c['cps_hard_limit']
         MIN_GAP_MS = c['min_gap_ms']
         MIN_DURATION_MS = c['min_duration_ms']
         MAX_DURATION_MS = c['max_duration_ms']
