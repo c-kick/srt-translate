@@ -110,6 +110,7 @@ BATCH_CONTEXT_DIR="${LOG_DIR}/batch_context_${VIDEO_BASENAME}"
 OUTPUT_SRT="${VIDEO_DIR}/${VIDEO_BASENAME}.nl.srt"
 SOURCE_SRT="${VIDEO_DIR}/${VIDEO_BASENAME}.en.srt"
 WORK_DIR="${LOG_DIR}/work_${VIDEO_BASENAME}"
+GLOSSARY_FILE="${WORK_DIR}/translation_glossary.md"
 
 mkdir -p "$LOG_DIR" "$BATCH_CONTEXT_DIR" "$WORK_DIR"
 
@@ -369,6 +370,12 @@ run_translation() {
             fi
         done
 
+        # Load cumulative glossary (persists across all invocations)
+        local glossary_content=""
+        if [[ -f "$GLOSSARY_FILE" ]]; then
+            glossary_content="$(cat "$GLOSSARY_FILE")"
+        fi
+
         invoke_claude --model "$MODEL_TRANSLATE" "Translation batches ${current_batch}-${end_of_group}" \
             "$SHARED_CONSTRAINTS" \
             "$WORKFLOW_TRANSLATE" \
@@ -394,6 +401,7 @@ Translate cues ${cue_start} through ${cue_end} of the source subtitle file.
 - Output SRT (write here): ${WORK_DIR}/draft.nl.srt
 - Scripts dir: ${SKILL_DIR}/scripts
 - Batch context dir: ${BATCH_CONTEXT_DIR}
+- Glossary file: ${GLOSSARY_FILE}
 - Work dir (temp files): ${WORK_DIR}
 
 **Working directory:** ${WORK_DIR}
@@ -409,7 +417,15 @@ else
     echo "**Continuing from batch $current_batch.** Append to existing ${WORK_DIR}/draft.nl.srt with \`cat >>\`."
 fi)
 
-## Previous Context
+## Cumulative Glossary
+
+$(if [[ -n "$glossary_content" ]]; then
+    echo "$glossary_content"
+else
+    echo "No glossary yet — you will create it after your first batch."
+fi)
+
+## Previous Batch Context
 
 $(if [[ -n "$prev_context" ]]; then
     echo "$prev_context"
@@ -427,7 +443,8 @@ $(cat "$CHECKPOINT_FILE")
 2. Write each batch directly to ${WORK_DIR}/draft.nl.srt (NEVER to terminal)
 3. Run per-batch grammar verification after each batch
 4. Write batch context summary after each batch to ${BATCH_CONTEXT_DIR}/batchN_context.md
-5. After the last batch in this group, update the checkpoint: ${CHECKPOINT_FILE}
+5. After each batch, update the cumulative glossary at ${GLOSSARY_FILE} (see workflow instructions)
+6. After the last batch in this group, update the checkpoint: ${CHECKPOINT_FILE}
 EOF
 
         current_batch=$(( end_of_group + 1 ))
