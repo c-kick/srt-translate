@@ -188,6 +188,20 @@ Read first 50-100 cues. Analyze for:
 
 ---
 
+## Phase 1b: Subject Research
+
+Before translating, familiarize yourself with the subject. This applies to all genres.
+
+- **Look up the title** (show, film, or documentary) to understand its premise, setting, era, and tone.
+- **Identify recurring proper nouns** from the first 50–100 cues: character names, locations, organizations, technical terms. Check Dutch Wikipedia (`nl.wikipedia.org`) for established Dutch equivalents where relevant (e.g. "charades" → "Hints", period-specific place names, scientific terminology).
+- **Recognize quotes or speeches** — if you recognize a fragment as a known speech, historical quote, or famous line, look it up to translate with the correct connotation and register.
+- **Note the era and domain** — a 1940s war film, a medical drama, and a tech startup comedy each require different vocabulary. Identify the domain now so you can apply the right register and jargon consistently throughout.
+- **Cultural references** — note any references (games, TV shows, idioms, slang) that may need Dutch equivalents. Flag ones that need localization research when you encounter them during translation.
+
+Add any established terms to the **Terminology** section of the checkpoint.
+
+---
+
 ## Output Filename
 
 Derive from source video:
