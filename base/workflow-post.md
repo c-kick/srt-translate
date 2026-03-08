@@ -75,7 +75,33 @@ After correcting timestamps, re-run Phase 3 to confirm `drift_errors` is empty b
 
 ---
 
+## Phase 2b: Speaker Change Marker Pass (polish mode only)
+
+When running in `--polish` mode (no Phase 2 translation), the NL draft has no `[SC]`/`[NM]` markers. The orchestrator runs a marker pass before Phase 3 to add them.
+
+The marker pass reads EN source + NL draft side-by-side and prepends markers to NL cues:
+- `[SC]` — different speaker from previous cue
+- `[NM]` — ambiguous speaker continuity
+- No marker — same speaker, eligible for merge
+
+The pass uses Opus (`$MODEL_TRANSLATE`) — Sonnet produces too few markers. It does not modify text, timestamps, or cue structure.
+
+This phase runs automatically via `orchestrate.sh` in polish mode. It is not needed for normal translations (Phase 2 adds markers during translation).
+
+---
+
 ## Phase 4: Script-Based Merge
+
+### How markers become output
+
+The merge script (`auto_merge_cues.py`) consumes `[SC]`/`[NM]` markers placed during Phase 2 (or Phase 2b in polish mode):
+
+- **`[SC]`** → adjacent cues are merged with `\n-` dash separation (dual-speaker formatting)
+- **`[NM]`** → merge is blocked at this boundary (cues stay separate)
+- **No marker** → cues are merged with space-joined text (same speaker)
+- All markers are stripped from final output
+
+See `references/translation-defaults.md` (Dual Speakers section) for worked examples.
 
 The script handles merge decisions mechanically.
 
