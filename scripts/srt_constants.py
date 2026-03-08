@@ -17,7 +17,7 @@ _NL_CONSTRAINTS = {
         'cps_hard_limit': 20,    # Condense text — extension alone insufficient
         'max_chars_per_line': 42,
         'max_duration_ms': 7007,
-        'min_duration_ms': 1400,
+        'min_duration_ms': round(20 * 1000 / 24),  # 20 frames — Netflix ⅚s minimum
         'min_gap_ms': round(3 * 1000 / 24),  # 3 frames
         'max_words_per_min': 180,
         'max_lines': 2,
@@ -29,7 +29,7 @@ _NL_CONSTRAINTS = {
         'cps_hard_limit': 20,    # Condense text — extension alone insufficient
         'max_chars_per_line': 42,
         'max_duration_ms': 7000,
-        'min_duration_ms': 830,
+        'min_duration_ms': round(21 * 1000 / 25),  # 21 frames — Netflix ⅚s minimum
         'min_gap_ms': round(3 * 1000 / 25),  # 3 frames
         'max_words_per_min': 180,
         'max_lines': 2,

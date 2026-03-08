@@ -16,7 +16,7 @@ Values depend on the source framerate. Determine framerate before starting.
 | CPS Hard Limit | 20 | 20 |
 | Characters per line | 42 | 42 |
 | Maximum cue duration | 7007ms | 7000ms |
-| Minimum cue duration | 1400ms | 830ms |
+| Minimum cue duration | 833ms | 840ms |
 | Minimum cue gap | 125ms (3 frames) | 120ms (3 frames) |
 | Max words/min | 180 | 180 |
 | Max lines per cue | 2 | 2 |
