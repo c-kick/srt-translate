@@ -169,6 +169,43 @@ After each batch, write to `$BATCH_CONTEXT_DIR/batch{N}_context.md`:
 
 The **Speaker Changes** section is critical for batch continuity — the next batch must know who was speaking at the end of the previous batch to correctly place `[SC]` on its first cue.
 
+### Cumulative glossary
+
+The glossary file (`$GLOSSARY_FILE`) persists across all batches and invocations. Unlike batch context summaries (which only carry the last 2 forward), the glossary preserves every translation decision for the entire file.
+
+**After each batch**, read the current glossary (if it exists), then write the updated version. Use **append-based updates** — add new entries, never remove existing ones. Only add entries that differ from the defaults in `references/translation-defaults.md`.
+
+Write the glossary in this format:
+
+```markdown
+# Translation Glossary
+<!-- Auto-maintained across batches. Do not delete entries. -->
+
+## Characters & Register
+<!-- character name → Dutch name (if adapted) + T/V register -->
+<!-- e.g. "John → Jan (V, formal throughout)" -->
+
+## Recurring Terminology
+<!-- English term → chosen Dutch translation -->
+<!-- Only terms where the choice matters for consistency -->
+
+## Proper Nouns & Titles
+<!-- Names, places, show-specific terms that must stay consistent -->
+
+## Recurring Phrases & Catchphrases
+<!-- Character-specific expressions, running gags, repeated lines -->
+
+## Style Notes
+<!-- Tone decisions, narrative voice, any cross-batch style choices -->
+```
+
+**Rules:**
+- Read the glossary at the start of each batch to stay consistent
+- After each batch, add any new entries discovered during translation
+- If a previous entry needs correction (e.g. you learned more context), update the entry in-place and add a note (e.g. `← updated batch 5: now formal`)
+- Keep entries concise — one line per term/decision
+- The glossary only grows; never delete entries unless they were factually wrong
+
 ### Post-batch validation
 
 ```bash
@@ -185,9 +222,12 @@ Update checkpoint:
 ## Translation State (Phase 2)
 - **Batches completed:** [N of M]
 - **Output cues:** [count]
+- **Glossary entries:** [count]
 - **Status:** COMPLETE
 
 ## Terminology
 ## Register
 ## Known Issues
 ```
+
+The cumulative glossary at `$GLOSSARY_FILE` should now contain all translation decisions made during Phase 2. It will be available for future runs (e.g. translating subsequent episodes of a series).
