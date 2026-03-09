@@ -79,6 +79,7 @@ Omit entirely:
 - Tag questions as filler: "right?", "yeah?", "okay?", "you see?", "isn't it?"
 - Hedge phrases as filler: "if you like", "if you will", "as it were", "shall we say"
 - Stuttering, hesitations, false starts
+- Backchannel responses: standalone "What?", "Yes?", "Huh?", "Hmm?" — these add nothing the viewer cannot already see. Drop the cue entirely, or if paired with another speaker's line in a dual-speaker cue, keep only the meaningful line. Exception: keep when the response itself IS the joke or carries dramatic weight (e.g., a long comedic pause before "What?")
 - Background TV/radio/news (unless plot-relevant)
 - Songs (unless functional to plot — musicals, character singing for a reason)
 
