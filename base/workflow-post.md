@@ -391,6 +391,27 @@ scripts/run-venv.sh scripts/extend_to_speech_lite.py \
 
 ---
 
+## Phase 11: Final Grammar Scan
+
+**Purpose:** Safety net for grammar and punctuation errors introduced or missed by earlier phases. This is the last quality gate before the log.
+
+Read the entire `${VIDEO_BASENAME}.nl.srt` as continuous text (ignore timecodes). Scan for:
+
+1. **Missing punctuation between sentences** — two sentences joined without a period, comma, or other separator (common merge artifact)
+2. **Incomplete or broken sentences** — fragments that don't form a complete thought
+3. **Grammar errors** — d/t/dt endings, de/het, wrong word order
+4. **Orphaned words from rebalancing** — text artifacts from Phase 8
+
+**Fix rules:**
+- Edit text only — do NOT touch timecodes or cue structure
+- Do NOT change cue count or merge decisions
+- Preserve dual-speaker formatting (`\n-`)
+- If a fix would push CPS above the soft ceiling, condense elsewhere in the cue to compensate
+
+**Working method:** Read in ~100-cue chunks. Fix directly — no separate report needed. If zero issues found, note "Phase 11: no issues" in the log.
+
+---
+
 ## Write Log File (Final Step)
 
 **Translation is not complete until the log is written.**

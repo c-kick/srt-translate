@@ -53,9 +53,9 @@ This means:
 
 ## Post-processing is not re-translation
 
-Phases 3–9 are mechanical. They fix structure (Phase 3), merge (Phase 4), trim timing (Phase 4b), optimize CPS (Phase 5), review grammar (Phase 6), finalize (Phase 7), rebalance lines (Phase 8), and QC against audio (Phase 9).
+Phases 3–11 are mechanical. They fix structure (Phase 3), merge (Phase 4), trim timing (Phase 4b), optimize CPS (Phase 5), review grammar (Phase 6), finalize (Phase 7), rebalance lines (Phase 8), QC against audio (Phase 9), optionally extend to speech (Phase 10), and do a final grammar scan (Phase 11).
 
-Phase 6 (linguistic review) is the only post-processing phase where Claude makes creative decisions — but it edits text, never timecodes, and never changes merge decisions or cue count.
+Phase 6 (linguistic review) and Phase 11 (final grammar scan) are the post-processing phases where Claude makes creative decisions — but they edit text only, never timecodes, and never change merge decisions or cue count. Phase 11 is intentionally the last step before the log: it catches anything introduced or missed by all preceding phases.
 
 ## Conservative merging
 

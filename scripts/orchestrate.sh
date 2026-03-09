@@ -683,7 +683,8 @@ Execute all phases in order:
 7. **Phase 8:** Line balance QC (auto-fix)
 8. **Phase 9:** VAD timing QC
 ${speech_sync_instruction}
-9. **Write log** to ${LOG_DIR}/$(date +%Y-%m-%d)_${VIDEO_BASENAME}.md
+9. **Phase 11:** Final grammar scan — read entire subtitle, fix any grammar/punctuation errors
+10. **Write log** to ${LOG_DIR}/$(date +%Y-%m-%d)_${VIDEO_BASENAME}.md
 
 All phases are mandatory. Do not skip any phase.
 
