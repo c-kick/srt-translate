@@ -16,9 +16,10 @@ __pycache__/
 !evals/trigger_queries.json
 draft*.srt
 merged*.srt
-batch_*.srt
+batch*.srt
 review_chunk.srt
-batch_source.srt
+*_temp.srt
+*_temp.py
 logs/
 checkpoints/
 notify.py
