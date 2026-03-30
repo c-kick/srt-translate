@@ -32,9 +32,11 @@ The orchestrator invokes Claude in headless mode per phase group, each with a fr
 | Flag | Effect |
 |------|--------|
 | `--resume` | Resume from last checkpoint |
+| `--fresh` | Delete checkpoint and start from phase 0 |
 | `--phase N` | Start from phase N (0=setup, 2=translate, 3=post) |
 | `--speech-sync` | Also run Phase 10 after Phase 9 |
 | `--polish` | Skip translation — post-process an existing `.nl.srt` instead |
+| `--max-batches N` | Stop after N translation batches (useful for testing) |
 
 ### Polish mode
 
