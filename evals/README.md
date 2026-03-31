@@ -174,7 +174,7 @@ scripts/run-venv.sh scripts/auto_merge_cues.py \
 scripts/run-venv.sh scripts/validate_srt.py merged.nl.srt --fps 24
 ```
 
-After merge, Phase 6 (Linguistic Review) should be run to verify merge boundary correctness — see `workflow-post.md`.
+After merge, Phase 6 (Linguistic Review) should be run to verify merge boundary correctness — see `workflow-post-review.md`.
 
 ## Results
 
