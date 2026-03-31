@@ -206,12 +206,44 @@ invoke_claude() {
     # cd to SKILL_DIR so relative paths like scripts/run-venv.sh resolve correctly
     # and Bash(scripts/*) permission pattern matches them regardless of launch cwd.
     local exit_code
+    local json_out
+    json_out="$(mktemp "${LOG_DIR}/claude_json_XXXXXX.tmp")"
+    local stderr_log="${LOG_DIR}/claude_stderr_$(date +%s).log"
+
     (cd "$SKILL_DIR" && echo "$prompt" | env -u CLAUDECODE claude -p \
         "${model_args[@]}" \
         --allowedTools "Read,Glob,Grep,Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
-        --output-format text \
-        2>"${LOG_DIR}/claude_stderr_$(date +%s).log")
+        --output-format json \
+        2>"$stderr_log") > "$json_out"
     exit_code=$?
+
+    # Extract and log cost/usage data
+    if [[ -s "$json_out" ]] && /usr/bin/jq -e '.usage' "$json_out" >/dev/null 2>&1; then
+        local cost_log="${LOG_DIR}/cost_log.jsonl"
+        /usr/bin/jq -c '{
+            timestamp: now | strftime("%Y-%m-%dT%H:%M:%SZ"),
+            description: $desc,
+            model: $mdl,
+            total_cost_usd: .total_cost_usd,
+            input_tokens: .usage.input_tokens,
+            output_tokens: .usage.output_tokens,
+            cache_creation_input_tokens: .usage.cache_creation_input_tokens,
+            cache_read_input_tokens: .usage.cache_read_input_tokens
+        }' --arg desc "$description" --arg mdl "${model:-default}" \
+            "$json_out" >> "$cost_log" 2>/dev/null
+
+        local cost input_tok output_tok cache_read
+        cost="$(/usr/bin/jq -r '.total_cost_usd // "n/a"' "$json_out")"
+        input_tok="$(/usr/bin/jq -r '.usage.input_tokens // "n/a"' "$json_out")"
+        output_tok="$(/usr/bin/jq -r '.usage.output_tokens // "n/a"' "$json_out")"
+        cache_read="$(/usr/bin/jq -r '.usage.cache_read_input_tokens // 0' "$json_out")"
+        log "  Cost: \$${cost} | Input: ${input_tok} (cached: ${cache_read}) | Output: ${output_tok}"
+    fi
+
+    # Print the text result (equivalent to old --output-format text behavior)
+    /usr/bin/jq -r '.result // empty' "$json_out" 2>/dev/null
+    rm -f "$json_out"
+
     if [[ $exit_code -ne 0 ]]; then
         log "WARNING: Claude exited with code $exit_code for: $description"
     fi
