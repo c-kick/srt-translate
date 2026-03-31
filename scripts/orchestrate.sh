@@ -42,7 +42,7 @@ MODEL_TRANSLATE="${MODEL_TRANSLATE:-opus}"
 MODEL_POST="${MODEL_POST:-sonnet}"
 
 # Max cues per translation batch before forcing a context-clearing sub-invocation
-BATCH_SIZE=100
+BATCH_SIZE=200
 MAX_BATCHES_PER_INVOCATION=6
 
 # ─── Argument parsing ──────────────────────────────────────────────────────

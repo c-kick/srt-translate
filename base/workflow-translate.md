@@ -132,10 +132,10 @@ If the prompt contains an **Invocation Handoff** section, this is a continuation
 
 ### Batch extraction
 
-Process **100 cues per batch** sequentially. Extract only the current batch before translating:
+Process cues in batches per the batch plan below. Extract only the current batch before translating:
 
 ```bash
-python3 scripts/extract_cues.py source.en.srt --start 1 --end 100 --output batch_source.srt
+python3 scripts/extract_cues.py source.en.srt --start N --end M --output batch_source.srt
 ```
 
 Write first batch using the Write tool. Subsequent batches:
