@@ -12,7 +12,8 @@ Every change in this plan is either invisible to the model (structural/orchestra
 
 **What this plan changes:**
 - `scripts/orchestrate.sh` — batch size, post-processing split, prompt assembly
-- `base/workflow-translate.md` — batch extraction instructions (eliminate duplicate reads)
+- `base/workflow-translate.md` — batch extraction instructions (eliminate duplicate reads), remove hardcoded batch size
+- `base/workflow-post.md` — split into 3 phase-group files (structural, review, finalize)
 - `scripts/extract_cues.py` — add `--stdout` flag for direct output
 
 **What this plan does NOT change:**
@@ -20,7 +21,6 @@ Every change in this plan is either invisible to the model (structural/orchestra
 - All translator profiles — untouched
 - All exemplar files — untouched
 - All reference files — untouched
-- `workflow-post.md` — untouched (changes are in the orchestrator only)
 - Translation output format — untouched
 - Post-processing phases — untouched (same work, just split across invocations)
 
@@ -53,6 +53,8 @@ CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000 \
 
 Check `${LOG_DIR}/claude_stderr_*.log` for actual token counts per turn. Compare against the theoretical model in `TOKEN_USAGE_ANALYSIS.md`.
 
+**Note:** It is unverified whether `claude -p` headless mode writes per-turn token counts to stderr. If the stderr logs don't contain token data, check the Claude Code billing dashboard or API response metadata for `input_tokens`/`output_tokens` per request. Adjust the measurement approach based on what data is actually available.
+
 ---
 
 ## Step 1: Increase Batch Size to 200 Cues
@@ -74,11 +76,19 @@ to:
 BATCH_SIZE=200
 ```
 
-This is a one-line change. Everything downstream (extract_cues, batch context, glossary, handoff) works identically — they're parameterized by `BATCH_SIZE` already.
+**Also update** `workflow-translate.md` line 135, which currently hardcodes "Process **100 cues per batch**". The inline prompt in `orchestrate.sh` uses `${BATCH_SIZE}` and would say "200", but `workflow-translate.md` would still say "100" — creating a contradictory instruction. Change to:
+
+```markdown
+Process cues in batches per the batch plan below. Extract only the current batch before translating:
+```
+
+This makes the workflow file defer to the inline prompt for the concrete batch size, eliminating the conflict.
+
+**Note on `MAX_BATCHES_PER_INVOCATION`:** This stays at 6. At batch-200, that means 6 × 200 = 1,200 cues per invocation — double the current 600-cue ceiling. This is well within Opus 4.6's 1M context window, but it means each invocation carries more accumulated context. The quality verification protocol below specifically tests for attention degradation at this larger invocation size.
 
 **Effect:**
 - 1500-cue film: 8 batches in 2 invocations (was 15 batches in 3 invocations)
-- ~18 turns per invocation instead of ~36
+- ~18 turns per invocation instead of ~36 (but each invocation is heavier — ~1,200 cues of accumulated context vs ~600)
 - One fewer system prompt payment (~19K tokens × ~18 turns = ~342K saved)
 - Lower cumulative context peak per invocation
 
@@ -102,6 +112,13 @@ The risk is attention degradation on longer batches — particularly `[SC]` mark
 **Accept criteria:** `[SC]` count within 5% of baseline. No false merges visible in spot-check of 20 merged cues.
 
 **Fallback:** If batch-200 degrades quality, try batch-150 as a middle ground. Even 150 saves ~25% by reducing from 3 invocations to 2 for a 1500-cue file.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `scripts/orchestrate.sh` | `BATCH_SIZE=100` → `BATCH_SIZE=200` |
+| `base/workflow-translate.md` | Remove hardcoded "100 cues per batch", defer to inline prompt |
 
 ---
 
@@ -132,10 +149,9 @@ parser.add_argument('--stdout', action='store_true',
 ```python
 # In extract_cues(), after building extracted list:
 if stdout:
-    from io import StringIO
-    buf = StringIO()
-    write_srt(extracted, buf)
-    print(buf.getvalue())
+    # Use subtitles_to_srt() (srt_utils.py:240), NOT write_srt() which takes a file path
+    from srt_utils import subtitles_to_srt
+    print(subtitles_to_srt(extracted))
     return {'success': True, 'extracted': len(extracted)}
 ```
 
@@ -166,6 +182,8 @@ After writing each batch, review the cues you just wrote (already in your contex
 ```
 
 The model already has the NL cues in context — it just wrote them. Telling it to re-read them via extract+Read is pure waste.
+
+**Nuance:** The current extract+Read gives the model a clean, isolated view of just the batch's NL cues. Without it, the model reviews from accumulated context where the relevant cues are interleaved with system prompt, prior batches, and tool results. For batch 1 this is trivial; for batch 6 the cues are buried in ~80K of context. Whether this affects grammar check quality is unverified — but the check itself remains (only the re-read is removed), so the model still reviews; it just does so from memory of what it wrote rather than from a freshly extracted file.
 
 #### 2c. Update inline prompt in orchestrate.sh
 
@@ -221,20 +239,28 @@ Each invocation starts with a clean context. The `$WORKFLOW_POST` file already d
 
 ### Implementation
 
-Replace `run_postprocessing()` with three functions. Each loads only the workflow sections it needs.
+Replace `run_postprocessing()` with three functions. Split `workflow-post.md` into three phase-group files so each invocation loads only the instructions it needs.
 
-**Option A (simple):** Keep loading the full `$WORKFLOW_POST` in each invocation, but the inline prompt specifies which phases to run. The unused phase instructions add ~2K tokens of noise but are otherwise harmless.
+**Why split the file (not just the invocations):** Loading the full `workflow-post.md` in each sub-invocation but telling the model "only run Phases 3-5, stop after Phase 5" is fragile. The model sees detailed instructions for Phases 6-11 that it should ignore — a known recipe for running ahead, particularly in the structural invocation where Phase 6 naturally follows Phase 5. Splitting the file eliminates this risk entirely and takes ~30 minutes of work.
 
-**Option B (optimal):** Split `workflow-post.md` into `workflow-post-structural.md`, `workflow-post-review.md`, `workflow-post-finalize.md`. Each invocation loads only its section.
+### Split workflow-post.md
 
-**Recommendation:** Start with Option A. It's a pure orchestrator change — no workflow file changes. If token savings from Option B are needed, do it as a follow-up.
+Split the current `base/workflow-post.md` into:
+
+| New file | Content from current workflow-post.md | Sections |
+|---|---|---|
+| `base/workflow-post-structural.md` | Pre-Phase-3 through Phase 5 | Save draft mapping, structural fix, merge, trim-to-speech, CPS optimization |
+| `base/workflow-post-review.md` | Phase 6 | Linguistic review (working method, checklist, fix rules, merge artifact examples) |
+| `base/workflow-post-finalize.md` | Phases 7-11 + log + error correction | Finalize, line balance, VAD QC, speech sync, grammar scan, log template, scripts reference |
+
+Each file gets the shared preamble ("You are a professional Dutch subtitle translator. This phase handles...") but only its own phase instructions. The scripts reference table at the end of the current file goes into `workflow-post-finalize.md` (it's most relevant there, and the scripts are self-documenting via `--help` anyway).
 
 ### Invocation 1: Structural (Phases 3-5)
 
 ```bash
 invoke_claude --model "$MODEL_POST" "Post-processing: structural (Phases 3-5)" \
     "$SHARED_CONSTRAINTS" \
-    "$WORKFLOW_POST" \
+    "$WORKFLOW_POST_STRUCTURAL" \
     "$COMMON_ERRORS" \
     "$TRANSLATION_DEFAULTS" \
     <<EOF
@@ -247,7 +273,6 @@ Execute these phases in order:
 3. **Phase 4:** Script merge with genre parameters
 4. **Phase 4b:** Trim to speech
 5. **Phase 5:** CPS optimization on trimmed.nl.srt
-Stop after Phase 5. Do not proceed to Phase 6.
 EOF
 ```
 
@@ -256,14 +281,13 @@ EOF
 ```bash
 invoke_claude --model "$MODEL_POST" "Post-processing: linguistic review (Phase 6)" \
     "$SHARED_CONSTRAINTS" \
-    "$WORKFLOW_POST" \
+    "$WORKFLOW_POST_REVIEW" \
     "$COMMON_ERRORS" \
     <<EOF
 ## Task
 Run Phase 6 (Linguistic Review) on the merged subtitle file.
 ...
 Work through the full file in chunks of ~80 cues.
-Stop after Phase 6. Do not proceed to Phase 7.
 EOF
 ```
 
@@ -274,7 +298,7 @@ Note: `$TRANSLATION_DEFAULTS` is not loaded here — Phase 6 doesn't need it.
 ```bash
 invoke_claude --model "$MODEL_POST" "Post-processing: finalize + QC (Phases 7-9, 11)" \
     "$SHARED_CONSTRAINTS" \
-    "$WORKFLOW_POST" \
+    "$WORKFLOW_POST_FINALIZE" \
     "$COMMON_ERRORS" \
     "$TRANSLATION_DEFAULTS" \
     <<EOF
@@ -303,7 +327,11 @@ Between invocations, verify the expected intermediate file exists:
 
 | File | Change |
 |------|--------|
-| `scripts/orchestrate.sh` | Split `run_postprocessing()` into 3 functions; update `main()` call chain |
+| `scripts/orchestrate.sh` | Split `run_postprocessing()` into 3 functions; update `main()` call chain; add file path vars for new workflow files |
+| `base/workflow-post.md` | **Removed** — replaced by the 3 files below |
+| `base/workflow-post-structural.md` | **New** — Phases 3-5 (pre-Phase-3 through CPS optimization) |
+| `base/workflow-post-review.md` | **New** — Phase 6 (linguistic review) |
+| `base/workflow-post-finalize.md` | **New** — Phases 7-11 + log + scripts reference |
 
 ---
 
@@ -312,9 +340,9 @@ Between invocations, verify the expected intermediate file exists:
 | Step | Change | Files | Effort | Savings |
 |---|---|---|---|---|
 | 0 | Measure baseline (caching + actual tokens) | None | 1 test run | Informs everything |
-| 1 | Batch size 100 → 200 | `orchestrate.sh` | 1 line + quality test | ~$13/film (40%) |
+| 1 | Batch size 100 → 200 | `orchestrate.sh`, `workflow-translate.md` | 2 lines + quality test | ~$13/film (40%) |
 | 2 | Eliminate duplicate reads | `extract_cues.py`, `workflow-translate.md`, `orchestrate.sh` | Small | ~$1/film |
-| 3 | Split post-processing | `orchestrate.sh` | Moderate | ~$3/film (25% of post) |
+| 3 | Split post-processing | `orchestrate.sh`, `workflow-post.md` → 3 files | Moderate | ~$3/film (25% of post) |
 
 **Total estimated savings (no caching):** ~$17 of $49 = **~35%** per 1500-cue film.
 **If prefix caching is already active:** Savings from Steps 1-3 are smaller in absolute terms (~$3-5), but the baseline cost is also much lower (~$10-15 per film), making it potentially acceptable as-is.
