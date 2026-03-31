@@ -31,47 +31,51 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from srt_utils import parse_srt_file, write_srt
+from srt_utils import parse_srt_file, write_srt, subtitles_to_srt
 
 
-def extract_cues(file_path: str, indices: list[int], output_path: str | None = None) -> dict:
+def extract_cues(file_path: str, indices: list[int], output_path: str | None = None,
+                  stdout: bool = False) -> dict:
     """
     Extract specific cues from an SRT file.
-    
+
     Args:
         file_path: Path to input SRT file
         indices: List of cue indices to extract (1-based)
         output_path: Optional output file path
-    
+        stdout: If True, print SRT content to stdout instead of writing to file
+
     Returns:
         Dict with extraction results
     """
     subtitles, parse_errors = parse_srt_file(file_path)
-    
+
     if parse_errors:
         return {'error': f'Parse errors: {parse_errors}', 'success': False}
-    
+
     # Build index lookup
     index_to_sub = {sub.index: sub for sub in subtitles}
-    
+
     # Extract requested cues
     extracted = []
     not_found = []
-    
+
     for idx in sorted(indices):
         if idx in index_to_sub:
             extracted.append(index_to_sub[idx])
         else:
             not_found.append(idx)
-    
+
     result = {
         'success': True,
         'requested': len(indices),
         'extracted': len(extracted),
         'not_found': not_found if not_found else None
     }
-    
-    if output_path:
+
+    if stdout:
+        print(subtitles_to_srt(extracted))
+    elif output_path:
         write_srt(extracted, output_path)
         result['output_file'] = output_path
     else:
@@ -85,7 +89,7 @@ def extract_cues(file_path: str, indices: list[int], output_path: str | None = N
             }
             for sub in extracted
         ]
-    
+
     return result
 
 
@@ -100,6 +104,8 @@ def main():
     parser.add_argument('--start', '-s', type=int, help='Start cue index (inclusive) - use with --end for range extraction')
     parser.add_argument('--end', '-e', type=int, help='End cue index (inclusive) - use with --start for range extraction')
     parser.add_argument('--output', '-o', help='Output SRT file path (if not specified, outputs JSON)')
+    parser.add_argument('--stdout', action='store_true',
+                        help='Print extracted SRT to stdout instead of writing to file')
     args = parser.parse_args()
     
     file_path = Path(args.file_path)
@@ -155,8 +161,9 @@ def main():
     # Remove duplicates and sort
     indices = sorted(set(indices))
     
-    result = extract_cues(str(file_path), indices, args.output)
-    print(json.dumps(result, indent=2))
+    result = extract_cues(str(file_path), indices, args.output, stdout=args.stdout)
+    if not args.stdout:
+        print(json.dumps(result, indent=2))
     sys.exit(0 if result.get('success', False) else 1)
 
 

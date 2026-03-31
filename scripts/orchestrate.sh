@@ -450,10 +450,11 @@ Translate cues ${cue_start} through ${cue_end} of the source subtitle file.
 
 **Working directory:** ${WORK_DIR}
 
-**Batch plan:** Process ${BATCH_SIZE} cues per batch. Extract each batch with:
+**Batch plan:** Process ${BATCH_SIZE} cues per batch. Extract each batch directly:
 \`\`\`bash
-python3 ${SKILL_DIR}/scripts/extract_cues.py ${SOURCE_SRT} --start N --end M --output ${WORK_DIR}/batch_source.srt
+python3 ${SKILL_DIR}/scripts/extract_cues.py ${SOURCE_SRT} --start N --end M --stdout
 \`\`\`
+This prints the source cues directly — read them from the command output. No separate Read call needed.
 
 $(if [[ $current_batch -eq 1 ]]; then
     echo "**This is the first batch group.** Use the Write tool for the first batch, then \`cat >>\` for subsequent batches."
