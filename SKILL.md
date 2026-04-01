@@ -60,9 +60,9 @@ For review, fixes, or individual phases, load the relevant workflow file directl
 
 | User says | Load | Action |
 |-----------|------|--------|
-| "review" / "revisie" | `base/workflow-post.md` | Phases 3-9 |
-| "grammar" / "grammatica" | `base/workflow-post.md` | Phase 6 only |
-| "fix cps" | `base/workflow-post.md` | Phase 5 only |
+| "review" / "revisie" | `base/workflow-post-structural.md` + `base/workflow-post-review.md` + `base/workflow-post-finalize.md` | Phases 3-11 |
+| "grammar" / "grammatica" | `base/workflow-post-review.md` | Phase 6 only |
+| "fix cps" | `base/workflow-post-structural.md` | Phase 5 only |
 | "translate" / "vertaal" | Use orchestrator instead | Full pipeline |
 
 ## Defaults

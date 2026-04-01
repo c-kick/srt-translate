@@ -132,10 +132,10 @@ If the prompt contains an **Invocation Handoff** section, this is a continuation
 
 ### Batch extraction
 
-Process **100 cues per batch** sequentially. Extract only the current batch before translating:
+Process cues in batches per the batch plan below. Extract only the current batch before translating:
 
 ```bash
-python3 scripts/extract_cues.py source.en.srt --start 1 --end 100 --output batch_source.srt
+python3 scripts/extract_cues.py source.en.srt --start N --end M --output batch_source.srt
 ```
 
 Write first batch using the Write tool. Subsequent batches:
@@ -147,13 +147,7 @@ EOF
 
 ### Per-batch grammar check
 
-After writing each batch:
-
-```bash
-python3 scripts/extract_cues.py draft.nl.srt --start {batch_start} --end {batch_end} --output batch_review.srt
-```
-
-Check (see `references/common-errors.md`):
+After writing each batch, review the cues you just wrote (already in your context from the Write/append step) against this checklist (see `references/common-errors.md`):
 1. d/t/dt verb endings
 2. de/het articles
 3. V2 word order after fronted elements

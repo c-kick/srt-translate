@@ -42,7 +42,7 @@ MODEL_TRANSLATE="${MODEL_TRANSLATE:-opus}"
 MODEL_POST="${MODEL_POST:-sonnet}"
 
 # Max cues per translation batch before forcing a context-clearing sub-invocation
-BATCH_SIZE=100
+BATCH_SIZE=200
 MAX_BATCHES_PER_INVOCATION=6
 
 # ─── Argument parsing ──────────────────────────────────────────────────────
@@ -120,7 +120,9 @@ mkdir -p "$LOG_DIR" "$BATCH_CONTEXT_DIR" "$WORK_DIR"
 SHARED_CONSTRAINTS="${SKILL_DIR}/base/shared-constraints.md"
 WORKFLOW_SETUP="${SKILL_DIR}/base/workflow-setup.md"
 WORKFLOW_TRANSLATE="${SKILL_DIR}/base/workflow-translate.md"
-WORKFLOW_POST="${SKILL_DIR}/base/workflow-post.md"
+WORKFLOW_POST_STRUCTURAL="${SKILL_DIR}/base/workflow-post-structural.md"
+WORKFLOW_POST_REVIEW="${SKILL_DIR}/base/workflow-post-review.md"
+WORKFLOW_POST_FINALIZE="${SKILL_DIR}/base/workflow-post-finalize.md"
 
 # References (loaded selectively per phase)
 COMMON_ERRORS="${SKILL_DIR}/references/common-errors.md"
@@ -162,16 +164,59 @@ count_cues() {
     echo "${n:-0}"
 }
 
+# Background heartbeat: emits a log line every HEARTBEAT_INTERVAL seconds
+# Usage: _run_heartbeat PID DESCRIPTION [MONITOR_FILE]
+_run_heartbeat() {
+    local pid="$1"
+    local description="$2"
+    local monitor_file="${3:-}"
+    local interval="${HEARTBEAT_INTERVAL:-60}"
+    local start_time=$SECONDS
+    local last_cues=-1
+
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep "$interval"
+        kill -0 "$pid" 2>/dev/null || break
+
+        local elapsed=$(( SECONDS - start_time ))
+        local min=$(( elapsed / 60 ))
+
+        local status=""
+        if [[ -n "$monitor_file" ]]; then
+            if [[ -f "$monitor_file" ]]; then
+                local cues
+                cues="$(count_cues "$monitor_file")"
+                if [[ "$last_cues" -ge 0 && "$cues" -gt "$last_cues" ]]; then
+                    status="${cues} cues (+$(( cues - last_cues )))"
+                elif [[ "$last_cues" -ge 0 && "$cues" -eq "$last_cues" ]]; then
+                    status="${cues} cues (unchanged)"
+                else
+                    status="${cues} cues"
+                fi
+                last_cues="$cues"
+            else
+                status="awaiting output file"
+            fi
+        fi
+
+        log "♥ ${description} — ${min}m elapsed${status:+, ${status}}"
+    done
+}
+
 # Invoke claude with a prompt assembled from files + inline instructions
-# Usage: invoke_claude [--model MODEL] "task description" file1.md file2.md ... <<< "inline prompt"
+# Usage: invoke_claude [--model MODEL] [--heartbeat-file FILE] "task description" file1.md file2.md ... <<< "inline prompt"
 invoke_claude() {
     local model=""
+    local heartbeat_file=""
 
-    # Parse optional --model flag
-    if [[ "$1" == "--model" ]]; then
-        model="$2"
-        shift 2
-    fi
+    # Parse optional flags
+    while [[ "${1:-}" == --* ]]; do
+        case "$1" in
+            --model) model="$2"; shift 2 ;;
+            --heartbeat-file) heartbeat_file="$2"; shift 2 ;;
+            *) break ;;
+        esac
+    done
 
     local description="$1"
     shift
@@ -205,13 +250,65 @@ invoke_claude() {
     # Unset CLAUDECODE to allow running from within a Claude Code session
     # cd to SKILL_DIR so relative paths like scripts/run-venv.sh resolve correctly
     # and Bash(scripts/*) permission pattern matches them regardless of launch cwd.
-    local exit_code
+    local json_out
+    json_out="$(mktemp "${LOG_DIR}/claude_json_XXXXXX.tmp")"
+    local stderr_log="${LOG_DIR}/claude_stderr_$(date +%s).log"
+
+    # Run claude -p in background with heartbeat monitoring
     (cd "$SKILL_DIR" && echo "$prompt" | env -u CLAUDECODE claude -p \
         "${model_args[@]}" \
         --allowedTools "Read,Glob,Grep,Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
-        --output-format text \
-        2>"${LOG_DIR}/claude_stderr_$(date +%s).log")
-    exit_code=$?
+        --output-format json \
+        2>"$stderr_log") > "$json_out" &
+    local claude_pid=$!
+
+    _run_heartbeat "$claude_pid" "$description" "$heartbeat_file" &
+    local heartbeat_pid=$!
+
+    # Trap signals to prevent orphaned background processes.
+    # Without this, Ctrl+C or SIGTERM kills the shell but leaves claude + heartbeat running
+    # (the orchestrator is typically launched detached: `bash orchestrate.sh > log 2>&1 &`
+    # so SIGHUP is not delivered to children on parent exit).
+    trap "kill $claude_pid $heartbeat_pid 2>/dev/null; exit 130" INT TERM
+
+    # Use || to prevent set -e from aborting on non-zero claude exit.
+    # Without this, a claude timeout/failure triggers set -e BEFORE exit_code=$? runs,
+    # silently killing the script — the exact failure mode this feature is meant to prevent.
+    local exit_code
+    wait "$claude_pid" && exit_code=0 || exit_code=$?
+
+    # Stop heartbeat cleanly and remove signal trap
+    kill "$heartbeat_pid" 2>/dev/null || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+    trap - INT TERM
+
+    # Extract and log cost/usage data
+    if [[ -s "$json_out" ]] && /usr/bin/jq -e '.usage' "$json_out" >/dev/null 2>&1; then
+        local cost_log="${LOG_DIR}/cost_log.jsonl"
+        /usr/bin/jq -c '{
+            timestamp: now | strftime("%Y-%m-%dT%H:%M:%SZ"),
+            description: $desc,
+            model: $mdl,
+            total_cost_usd: .total_cost_usd,
+            input_tokens: .usage.input_tokens,
+            output_tokens: .usage.output_tokens,
+            cache_creation_input_tokens: .usage.cache_creation_input_tokens,
+            cache_read_input_tokens: .usage.cache_read_input_tokens
+        }' --arg desc "$description" --arg mdl "${model:-default}" \
+            "$json_out" >> "$cost_log" 2>/dev/null
+
+        local cost input_tok output_tok cache_read
+        cost="$(/usr/bin/jq -r '.total_cost_usd // "n/a"' "$json_out")"
+        input_tok="$(/usr/bin/jq -r '.usage.input_tokens // "n/a"' "$json_out")"
+        output_tok="$(/usr/bin/jq -r '.usage.output_tokens // "n/a"' "$json_out")"
+        cache_read="$(/usr/bin/jq -r '.usage.cache_read_input_tokens // 0' "$json_out")"
+        log "  Cost: \$${cost} | Input: ${input_tok} (cached: ${cache_read}) | Output: ${output_tok}"
+    fi
+
+    # Print the text result (equivalent to old --output-format text behavior)
+    /usr/bin/jq -r '.result // empty' "$json_out" 2>/dev/null
+    rm -f "$json_out"
+
     if [[ $exit_code -ne 0 ]]; then
         log "WARNING: Claude exited with code $exit_code for: $description"
     fi
@@ -388,7 +485,7 @@ run_translation() {
             glossary_content="$(cat "$GLOSSARY_FILE")"
         fi
 
-        invoke_claude --model "$MODEL_TRANSLATE" "Translation batches ${current_batch}-${end_of_group}" \
+        invoke_claude --model "$MODEL_TRANSLATE" --heartbeat-file "${WORK_DIR}/draft.nl.srt" "Translation batches ${current_batch}-${end_of_group}" \
             "$SHARED_CONSTRAINTS" \
             "$WORKFLOW_TRANSLATE" \
             "$translator" \
@@ -418,10 +515,11 @@ Translate cues ${cue_start} through ${cue_end} of the source subtitle file.
 
 **Working directory:** ${WORK_DIR}
 
-**Batch plan:** Process ${BATCH_SIZE} cues per batch. Extract each batch with:
+**Batch plan:** Process ${BATCH_SIZE} cues per batch. Extract each batch directly:
 \`\`\`bash
-python3 ${SKILL_DIR}/scripts/extract_cues.py ${SOURCE_SRT} --start N --end M --output ${WORK_DIR}/batch_source.srt
+python3 ${SKILL_DIR}/scripts/extract_cues.py ${SOURCE_SRT} --start N --end M --stdout
 \`\`\`
+This prints the source cues directly — read them from the command output. No separate Read call needed.
 
 $(if [[ $current_batch -eq 1 ]]; then
     echo "**This is the first batch group.** Use the Write tool for the first batch, then \`cat >>\` for subsequent batches."
@@ -516,7 +614,7 @@ run_marker_pass() {
     local classification
     classification="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
 
-    invoke_claude --model "$MODEL_TRANSLATE" "Speaker change marker pass" \
+    invoke_claude --model "$MODEL_TRANSLATE" --heartbeat-file "${WORK_DIR}/draft.nl.srt" "Speaker change marker pass" \
         "$SHARED_CONSTRAINTS" \
         <<EOF
 
@@ -572,52 +670,44 @@ EOF
 }
 
 # ─── Phase Group: Post-processing (Phases 3-9+) ────────────────────────────
+#
+# Split into 3 sub-invocations so each starts with a clean context:
+#   1. Structural (Phases 3-5): fix, merge, trim, CPS
+#   2. Review (Phase 6): linguistic review
+#   3. Finalize (Phases 7-11 + log): QC, grammar scan, log
 
-run_postprocessing() {
-    log "═══ Phase Group: Post-Processing (Phases 3-9) ═══"
+# Read checkpoint values shared by all post-processing functions
+_postprocessing_init() {
+    PP_CLASSIFICATION="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
 
-    local classification
-    classification="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
-
-    # Read framerate from checkpoint (default 25 for legacy)
-    local framerate min_gap
-    framerate="$(checkpoint_get "Framerate")"
-    [[ -z "$framerate" ]] && framerate=25
-    if [[ "$framerate" == "24" ]]; then
-        min_gap=125
+    PP_FRAMERATE="$(checkpoint_get "Framerate")"
+    [[ -z "$PP_FRAMERATE" ]] && PP_FRAMERATE=25
+    if [[ "$PP_FRAMERATE" == "24" ]]; then
+        PP_MIN_GAP=125
     else
-        min_gap=120
+        PP_MIN_GAP=120
     fi
 
-    # Determine genre merge parameters (fps-aware for documentary/drama)
-    local gap_threshold max_duration
-    case "$classification" in
+    case "$PP_CLASSIFICATION" in
         documentary)
-            gap_threshold=1000
-            [[ "$framerate" == "24" ]] && max_duration=7007 || max_duration=7000
+            PP_GAP_THRESHOLD=1000
+            [[ "$PP_FRAMERATE" == "24" ]] && PP_MAX_DURATION=7007 || PP_MAX_DURATION=7000
             ;;
         drama)
-            gap_threshold=1000
-            [[ "$framerate" == "24" ]] && max_duration=7007 || max_duration=7000
+            PP_GAP_THRESHOLD=1000
+            [[ "$PP_FRAMERATE" == "24" ]] && PP_MAX_DURATION=7007 || PP_MAX_DURATION=7000
             ;;
-        comedy)         gap_threshold=800;  max_duration=6000 ;;
-        fast-unscripted) gap_threshold=500; max_duration=6000 ;;
+        comedy)         PP_GAP_THRESHOLD=800;  PP_MAX_DURATION=6000 ;;
+        fast-unscripted) PP_GAP_THRESHOLD=500; PP_MAX_DURATION=6000 ;;
         *)
-            gap_threshold=1000
-            [[ "$framerate" == "24" ]] && max_duration=7007 || max_duration=7000
+            PP_GAP_THRESHOLD=1000
+            [[ "$PP_FRAMERATE" == "24" ]] && PP_MAX_DURATION=7007 || PP_MAX_DURATION=7000
             ;;
     esac
 
-    log "Framerate: $framerate | Min gap: ${min_gap}ms | Max duration: ${max_duration}ms"
-
-    local speech_sync_instruction=""
-    if $SPEECH_SYNC; then
-        speech_sync_instruction="After Phase 9, also run Phase 10 (Speech Sync) as described in the workflow."
-    fi
+    log "Framerate: $PP_FRAMERATE | Min gap: ${PP_MIN_GAP}ms | Max duration: ${PP_MAX_DURATION}ms"
 
     # Fix trailing commas at end of cues → ellipsis (continuation marker)
-    # Matches comma followed by blank line (= end of cue).
-    # Mid-cue commas (line 1 of 2-line cue) are followed by text, not blank line → untouched.
     local draft="${WORK_DIR}/draft.nl.srt"
     if [[ -f "$draft" ]]; then
         local before after
@@ -635,17 +725,21 @@ with open(p,'w') as f: f.write(t)
         after="${after:-0}"
         log "Continuation fix: $((before - after)) end-of-cue commas → '...', ${after} mid-cue commas kept"
     fi
+}
 
-    invoke_claude --model "$MODEL_POST" "Post-processing (Phases 3-9)" \
+run_postprocessing_structural() {
+    log "═══ Post-Processing: Structural (Phases 3-5) ═══"
+
+    invoke_claude --model "$MODEL_POST" "Post-processing: structural (Phases 3-5)" \
         "$SHARED_CONSTRAINTS" \
-        "$WORKFLOW_POST" \
+        "$WORKFLOW_POST_STRUCTURAL" \
         "$COMMON_ERRORS" \
         "$TRANSLATION_DEFAULTS" \
         <<EOF
 
 ## Task
 
-Run post-processing phases 3 through 9 (and log) on the translated draft.
+Run post-processing phases 3 through 5 on the translated draft.
 
 **Paths:**
 - Video: ${VIDEO_FILE}
@@ -659,12 +753,12 @@ Run post-processing phases 3 through 9 (and log) on the translated draft.
 **Working directory:** ${WORK_DIR}
 
 **Genre parameters:**
-- Classification: ${classification}
-- Framerate: ${framerate} fps
-- --gap-threshold: ${gap_threshold}
-- --max-duration: ${max_duration}
-- --min-gap: ${min_gap}
-- --fps: ${framerate}
+- Classification: ${PP_CLASSIFICATION}
+- Framerate: ${PP_FRAMERATE} fps
+- --gap-threshold: ${PP_GAP_THRESHOLD}
+- --max-duration: ${PP_MAX_DURATION}
+- --min-gap: ${PP_MIN_GAP}
+- --fps: ${PP_FRAMERATE}
 - --close-gaps: 1000 (Auteursbond: gaps < 1s closed in Phase 5)
 
 **Checkpoint:**
@@ -672,19 +766,108 @@ $(cat "$CHECKPOINT_FILE")
 
 ## Instructions
 
-Execute all phases in order:
+Execute these phases in order:
 
-1. **Phase 3:** Structural fix on draft.nl.srt
-2. **Phase 4:** Script merge with genre parameters above
-3. **Phase 4b:** Trim to speech → trimmed.nl.srt + trim_report.json. If trim fails, copy merged.nl.srt to trimmed.nl.srt and continue.
-4. **Phase 5:** CPS optimization on trimmed.nl.srt (NOT merged.nl.srt) — fix outliers > 17
-5. **Phase 6:** Linguistic review — all cues in ~80-cue chunks
-6. **Phase 7:** Finalize (validate, renumber, add credit, rename to ${OUTPUT_SRT})
-7. **Phase 8:** Line balance QC (auto-fix)
-8. **Phase 9:** VAD timing QC
+1. **Pre-Phase-3:** Save draft mapping
+2. **Phase 3:** Structural fix on draft.nl.srt
+3. **Phase 4:** Script merge with genre parameters above
+4. **Phase 4b:** Trim to speech → trimmed.nl.srt + trim_report.json. If trim fails, copy merged.nl.srt to trimmed.nl.srt and continue.
+5. **Phase 5:** CPS optimization on trimmed.nl.srt (NOT merged.nl.srt) — fix outliers > 17
+
+All phases are mandatory. Do not skip any phase.
+EOF
+
+    # Verify intermediate output exists
+    if [[ ! -f "${WORK_DIR}/trimmed.nl.srt" && ! -f "${WORK_DIR}/merged.nl.srt" ]]; then
+        log "WARNING: Structural phases did not produce trimmed.nl.srt or merged.nl.srt"
+    else
+        log "Structural phases complete."
+    fi
+}
+
+run_postprocessing_review() {
+    log "═══ Post-Processing: Linguistic Review (Phase 6) ═══"
+
+    invoke_claude --model "$MODEL_POST" "Post-processing: linguistic review (Phase 6)" \
+        "$SHARED_CONSTRAINTS" \
+        "$WORKFLOW_POST_REVIEW" \
+        "$COMMON_ERRORS" \
+        <<EOF
+
+## Task
+
+Run Phase 6 (Linguistic Review) on the merged subtitle file.
+
+**Paths:**
+- Video: ${VIDEO_FILE}
+- Source SRT: ${SOURCE_SRT}
+- Merged SRT: ${WORK_DIR}/merged.nl.srt
+- Merge report: ${WORK_DIR}/merge_report.json
+- Scripts dir: ${SKILL_DIR}/scripts
+- Work dir (temp files): ${WORK_DIR}
+
+**Working directory:** ${WORK_DIR}
+
+**Genre:** ${PP_CLASSIFICATION}
+
+## Instructions
+
+Work through the full merged.nl.srt in chunks of ~80 cues.
+Review and fix all linguistic issues per the workflow.
+EOF
+
+    log "Linguistic review complete."
+}
+
+run_postprocessing_finalize() {
+    log "═══ Post-Processing: Finalize + QC (Phases 7-11) ═══"
+
+    local speech_sync_instruction=""
+    if $SPEECH_SYNC; then
+        speech_sync_instruction="6. **Phase 10:** Speech sync (extend to speech boundaries)"
+    fi
+
+    invoke_claude --model "$MODEL_POST" "Post-processing: finalize + QC (Phases 7-11)" \
+        "$SHARED_CONSTRAINTS" \
+        "$WORKFLOW_POST_FINALIZE" \
+        "$COMMON_ERRORS" \
+        "$TRANSLATION_DEFAULTS" \
+        <<EOF
+
+## Task
+
+Run finalization and QC phases on the reviewed subtitle file.
+
+**Paths:**
+- Video: ${VIDEO_FILE}
+- Source SRT: ${SOURCE_SRT}
+- Merged SRT: ${WORK_DIR}/merged.nl.srt
+- Output SRT: ${OUTPUT_SRT}
+- Merge report: ${WORK_DIR}/merge_report.json
+- Draft mapping: ${WORK_DIR}/draft_mapping.json
+- Scripts dir: ${SKILL_DIR}/scripts
+- Log dir: ${LOG_DIR}
+- Work dir (temp files): ${WORK_DIR}
+
+**Working directory:** ${WORK_DIR}
+
+**Genre parameters:**
+- Classification: ${PP_CLASSIFICATION}
+- Framerate: ${PP_FRAMERATE} fps
+
+**Checkpoint:**
+$(cat "$CHECKPOINT_FILE")
+
+## Instructions
+
+Execute these phases in order:
+
+1. **Phase 7:** Finalize (validate, renumber, add credit, rename to ${OUTPUT_SRT})
+2. **Phase 8:** Line balance QC (auto-fix)
+3. **Phase 9:** VAD timing QC
 ${speech_sync_instruction}
-9. **Phase 11:** Final grammar scan — read entire subtitle, fix any grammar/punctuation errors
-10. **Write log** to ${LOG_DIR}/$(date +%Y-%m-%d)_${VIDEO_BASENAME}.md
+4. **Phase 11:** Final grammar scan — read entire subtitle, fix any grammar/punctuation errors
+5. **Write log** to ${LOG_DIR}/$(date +%Y-%m-%d)_${VIDEO_BASENAME}.md
 
 All phases are mandatory. Do not skip any phase.
 
@@ -696,6 +879,13 @@ EOF
     else
         log "Post-processing complete. Output: $OUTPUT_SRT"
     fi
+}
+
+run_postprocessing() {
+    _postprocessing_init
+    run_postprocessing_structural
+    run_postprocessing_review
+    run_postprocessing_finalize
 }
 
 # ─── Main execution ────────────────────────────────────────────────────────
