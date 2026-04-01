@@ -86,20 +86,20 @@ For individual phases or review tasks, invoke Claude directly with the relevant 
 
 | Phase | What happens | Model |
 |---|---|---|
-| 0a | OCR extraction (optional, for burned-in subs) | Sonnet |
-| 0 | Source sync via ffsubsync + WebRTC VAD | Sonnet |
-| 0b | Title card detection — downloads foreign subtitle from OpenSubtitles, identifies burned-in cues missing from the English source (requires `OPENSUBTITLES_API_KEY`) | Sonnet |
+| 0a | OCR extraction (optional, for burned-in subs) | — |
+| 0 | Source sync via ffsubsync + WebRTC VAD | — |
+| 0b | Title card detection — downloads foreign subtitle from OpenSubtitles, identifies burned-in cues missing from the English source (requires `OPENSUBTITLES_API_KEY`) | — |
 | 1 | Content classification (documentary / drama / comedy / fast-unscripted) | Sonnet |
 | 2 | Translation — Claude translates in batches of 200 cues, removes SDH by default *(skipped in `--polish` mode)* | **Opus** |
 | 3 | Structural fix (line length, overlaps, gap violations) | Sonnet |
-| 4 | Script-based cue merging | Sonnet |
-| 4b | Trim-to-speech — pulls back cue end times that linger past speech using VAD | Sonnet |
+| 4 | Script-based cue merging | — |
+| 4b | Trim-to-speech — pulls back cue end times that linger past speech using VAD | — |
 | 5 | CPS optimization (end-time extension + text condensation) | Sonnet |
 | 6 | Linguistic review — grammar, naturalness, register (uses English source as reference) | Sonnet |
-| 7 | Finalization, renumbering, credit cue | Sonnet |
+| 7 | Finalization, renumbering, credit cue | — |
 | 8 | Line balance QC (orphan words, top-heavy pyramids) | Sonnet |
 | 9 | VAD timing QC against source audio | Sonnet |
-| 10 | Speech sync extension (optional) | Sonnet |
+| 10 | Speech sync extension (optional) | — |
 
 Models are configurable via env vars: `MODEL_SETUP` (phases 0–1), `MODEL_TRANSLATE` (phase 2), `MODEL_POST` (phases 3–10).
 
