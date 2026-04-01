@@ -90,7 +90,7 @@ For individual phases or review tasks, invoke Claude directly with the relevant 
 | 0 | Source sync via ffsubsync + WebRTC VAD |
 | 0b | Title card detection — downloads foreign subtitle from OpenSubtitles, identifies burned-in cues missing from the English source (requires `OPENSUBTITLES_API_KEY`) |
 | 1 | Content classification (documentary / drama / comedy / fast-unscripted) |
-| 2 | Translation — Claude translates in batches of 100 cues, removes SDH by default *(skipped in `--polish` mode)* |
+| 2 | Translation — Claude translates in batches of 200 cues, removes SDH by default *(skipped in `--polish` mode)* |
 | 3 | Structural fix (line length, overlaps, gap violations) |
 | 4 | Script-based cue merging |
 | 4b | Trim-to-speech — pulls back cue end times that linger past speech using VAD |
