@@ -164,16 +164,59 @@ count_cues() {
     echo "${n:-0}"
 }
 
+# Background heartbeat: emits a log line every HEARTBEAT_INTERVAL seconds
+# Usage: _run_heartbeat PID DESCRIPTION [MONITOR_FILE]
+_run_heartbeat() {
+    local pid="$1"
+    local description="$2"
+    local monitor_file="${3:-}"
+    local interval="${HEARTBEAT_INTERVAL:-60}"
+    local start_time=$SECONDS
+    local last_cues=-1
+
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep "$interval"
+        kill -0 "$pid" 2>/dev/null || break
+
+        local elapsed=$(( SECONDS - start_time ))
+        local min=$(( elapsed / 60 ))
+
+        local status=""
+        if [[ -n "$monitor_file" ]]; then
+            if [[ -f "$monitor_file" ]]; then
+                local cues
+                cues="$(count_cues "$monitor_file")"
+                if [[ "$last_cues" -ge 0 && "$cues" -gt "$last_cues" ]]; then
+                    status="${cues} cues (+$(( cues - last_cues )))"
+                elif [[ "$last_cues" -ge 0 && "$cues" -eq "$last_cues" ]]; then
+                    status="${cues} cues (unchanged)"
+                else
+                    status="${cues} cues"
+                fi
+                last_cues="$cues"
+            else
+                status="awaiting output file"
+            fi
+        fi
+
+        log "♥ ${description} — ${min}m elapsed${status:+, ${status}}"
+    done
+}
+
 # Invoke claude with a prompt assembled from files + inline instructions
-# Usage: invoke_claude [--model MODEL] "task description" file1.md file2.md ... <<< "inline prompt"
+# Usage: invoke_claude [--model MODEL] [--heartbeat-file FILE] "task description" file1.md file2.md ... <<< "inline prompt"
 invoke_claude() {
     local model=""
+    local heartbeat_file=""
 
-    # Parse optional --model flag
-    if [[ "$1" == "--model" ]]; then
-        model="$2"
-        shift 2
-    fi
+    # Parse optional flags
+    while [[ "${1:-}" == --* ]]; do
+        case "$1" in
+            --model) model="$2"; shift 2 ;;
+            --heartbeat-file) heartbeat_file="$2"; shift 2 ;;
+            *) break ;;
+        esac
+    done
 
     local description="$1"
     shift
@@ -207,17 +250,37 @@ invoke_claude() {
     # Unset CLAUDECODE to allow running from within a Claude Code session
     # cd to SKILL_DIR so relative paths like scripts/run-venv.sh resolve correctly
     # and Bash(scripts/*) permission pattern matches them regardless of launch cwd.
-    local exit_code
     local json_out
     json_out="$(mktemp "${LOG_DIR}/claude_json_XXXXXX.tmp")"
     local stderr_log="${LOG_DIR}/claude_stderr_$(date +%s).log"
 
+    # Run claude -p in background with heartbeat monitoring
     (cd "$SKILL_DIR" && echo "$prompt" | env -u CLAUDECODE claude -p \
         "${model_args[@]}" \
         --allowedTools "Read,Glob,Grep,Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
         --output-format json \
-        2>"$stderr_log") > "$json_out"
-    exit_code=$?
+        2>"$stderr_log") > "$json_out" &
+    local claude_pid=$!
+
+    _run_heartbeat "$claude_pid" "$description" "$heartbeat_file" &
+    local heartbeat_pid=$!
+
+    # Trap signals to prevent orphaned background processes.
+    # Without this, Ctrl+C or SIGTERM kills the shell but leaves claude + heartbeat running
+    # (the orchestrator is typically launched detached: `bash orchestrate.sh > log 2>&1 &`
+    # so SIGHUP is not delivered to children on parent exit).
+    trap "kill $claude_pid $heartbeat_pid 2>/dev/null; exit 130" INT TERM
+
+    # Use || to prevent set -e from aborting on non-zero claude exit.
+    # Without this, a claude timeout/failure triggers set -e BEFORE exit_code=$? runs,
+    # silently killing the script — the exact failure mode this feature is meant to prevent.
+    local exit_code
+    wait "$claude_pid" && exit_code=0 || exit_code=$?
+
+    # Stop heartbeat cleanly and remove signal trap
+    kill "$heartbeat_pid" 2>/dev/null || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+    trap - INT TERM
 
     # Extract and log cost/usage data
     if [[ -s "$json_out" ]] && /usr/bin/jq -e '.usage' "$json_out" >/dev/null 2>&1; then
@@ -422,7 +485,7 @@ run_translation() {
             glossary_content="$(cat "$GLOSSARY_FILE")"
         fi
 
-        invoke_claude --model "$MODEL_TRANSLATE" "Translation batches ${current_batch}-${end_of_group}" \
+        invoke_claude --model "$MODEL_TRANSLATE" --heartbeat-file "${WORK_DIR}/draft.nl.srt" "Translation batches ${current_batch}-${end_of_group}" \
             "$SHARED_CONSTRAINTS" \
             "$WORKFLOW_TRANSLATE" \
             "$translator" \
@@ -551,7 +614,7 @@ run_marker_pass() {
     local classification
     classification="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
 
-    invoke_claude --model "$MODEL_TRANSLATE" "Speaker change marker pass" \
+    invoke_claude --model "$MODEL_TRANSLATE" --heartbeat-file "${WORK_DIR}/draft.nl.srt" "Speaker change marker pass" \
         "$SHARED_CONSTRAINTS" \
         <<EOF
 
