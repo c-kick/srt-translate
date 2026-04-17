@@ -54,6 +54,7 @@ START_PHASE=""
 SPEECH_SYNC=false
 KEEP_SDH=false
 KEEP_WORK=false
+NO_EMBEDDED=false  # if true: skip embedded-subtitle extraction, force external .en.srt
 MAX_BATCHES=0  # 0 = unlimited
 VIDEO_FILE=""
 EFFORT="medium"    # passed to claude -p --effort (low|medium|high|xhigh|max). Pinned so CLI default drift doesn't silently change behavior.
@@ -69,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --speech-sync)  SPEECH_SYNC=true; shift ;;
         --keep-sdh)     KEEP_SDH=true; shift ;;
         --keep-work)    KEEP_WORK=true; shift ;;
+        --no-embedded)  NO_EMBEDDED=true; shift ;;
         --max-batches)  MAX_BATCHES="$2"; shift 2 ;;
         --effort)       EFFORT="$2"; shift 2 ;;
         --budget-cap-usd) BUDGET_CAP_USD="$2"; shift 2 ;;
@@ -86,6 +88,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --speech-sync   Run Phase 10 (speech sync) after Phase 9"
             echo "  --keep-sdh      Keep SDH cues (default: remove them before translation)"
             echo "  --keep-work     Preserve work directory after successful completion (for debugging)"
+            echo "  --no-embedded   Skip embedded subtitle extraction; use the existing external .en.srt only."
+            echo "                  Use when the video has burn-in subs or embedded subs covering only foreign-language parts."
             echo "  --max-batches N Limit translation to N batches (for testing)"
             echo "  --effort LEVEL  Thinking effort: low|medium|high|xhigh|max (applies to every invocation)"
             echo "  --budget-cap-usd AMOUNT"
@@ -363,6 +367,16 @@ run_setup() {
 ## Task
 
 Translate the subtitles for this video: ${VIDEO_FILE}
+
+$($NO_EMBEDDED && cat <<'NOEMB'
+**MODE: --no-embedded is SET.**
+- Do NOT run ffprobe for embedded subtitle streams.
+- Do NOT extract embedded subtitles.
+- REQUIRE that ${SOURCE_SRT} exists before proceeding. If missing, fail with a clear error.
+- Sync the external .en.srt directly (see workflow-setup Phase 0 external path).
+- Reason: the video has burn-in subs or embedded subs that cover only foreign-language parts, not the main dialogue.
+NOEMB
+)
 
 1. Run pre-flight checks (existing .nl.srt may be overwritten — do NOT ask for confirmation)
 2. Detect and extract source subtitles
@@ -933,6 +947,7 @@ main() {
     log "║  Skill: ${SKILL_DIR}"
     log "║  Logs:  ${LOG_DIR}"
     log "║  SDH:   $($KEEP_SDH && echo "keep" || echo "remove (default)")"
+    $NO_EMBEDDED && log "║  Source: external .en.srt only (embedded skipped)"
     log "║  Mode:  $($POLISH && echo "--polish (skip translation, post-process existing NL)" || echo "full pipeline")"
     log "║  Models: setup=${MODEL_SETUP} translate=${MODEL_TRANSLATE} post=${MODEL_POST}"
     [[ -n "$EFFORT" ]]         && log "║  Effort: ${EFFORT}"

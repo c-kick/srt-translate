@@ -14,6 +14,10 @@ python3 scripts/validate_srt.py merged.nl.srt \
   --fix --output final.nl.srt
 python3 scripts/renumber_cues.py final.nl.srt --in-place
 python3 scripts/add_credit.py final.nl.srt --in-place --cps 12
+
+# Back up any existing .nl.srt in the video directory before overwriting it.
+# Required by the File Safety rule in shared-constraints.md.
+python3 -c "import sys; sys.path.insert(0, 'scripts'); from srt_utils import backup_if_exists; b = backup_if_exists('${VIDEO_BASENAME}.nl.srt'); print(f'Backed up existing {b}') if b else None"
 mv final.nl.srt "${VIDEO_BASENAME}.nl.srt"
 ```
 

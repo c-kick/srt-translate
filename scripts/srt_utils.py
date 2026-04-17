@@ -7,8 +7,25 @@ Not meant to be called directly.
 import re
 import shutil
 import sys
+from datetime import datetime
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
+
+def backup_if_exists(path: str) -> Optional[str]:
+    """
+    If `path` exists, copy it to `<path>.bak-YYYYMMDD_HHMMSS` in the same folder.
+    Returns the backup path (str) if a backup was made, else None.
+    Never raises on a missing source file.
+    """
+    p = Path(path)
+    if not p.exists():
+        return None
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup = p.with_name(f"{p.name}.bak-{ts}")
+    shutil.copy2(p, backup)
+    return str(backup)
 
 
 def visible_length(text: str) -> int:

@@ -62,6 +62,7 @@ This installs `ffsubsync`, `webrtcvad`, `pysubs2`, and other dependencies into `
 | `--speech-sync` | Also run Phase 10 (VAD speech sync) after Phase 9 | off — Phase 10 is skipped |
 | `--keep-sdh` | Keep SDH cues in the output | off — Claude removes SDH during translation |
 | `--keep-work` | Preserve work dir after completion (debugging) | off — work dir deleted on success |
+| `--no-embedded` | Skip embedded subtitle extraction; use the existing external `.en.srt` only. Use when the video has burn-in subs or embedded subs covering only foreign-language parts (not the main dialogue). | off — embedded subs preferred when present |
 | `--max-batches N` | Limit translation to N batches (testing) | 0 (unlimited) |
 | `--effort LEVEL` | Thinking effort per invocation: `low`, `medium`, `high`, `xhigh`, `max` | `medium` (pinned — not inherited from CLI default) |
 | `--budget-cap-usd AMOUNT` | Hard cost cap applied **per Claude invocation**. If exceeded, that invocation aborts and the phase fails. Scope: setup = 1 invocation, translation = 1 invocation per group of up to 6 batches (~1200 cues), post-processing = 3 invocations. Historical per-invocation costs are in `logs/srt-translate/cost_log.jsonl`. | **uncapped** |

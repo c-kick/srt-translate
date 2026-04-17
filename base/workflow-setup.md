@@ -14,6 +14,8 @@
 
 ## Source Detection
 
+> **`--no-embedded` override:** If the orchestrator prompt declares `--no-embedded` mode, skip all ffprobe/ffmpeg embedded detection and extraction. Require that the external `.en.srt` (at `${SOURCE_SRT}`) exists — fail with a clear error if it doesn't. Then proceed with the external sync path (see Phase 0). Used when the video has burn-in subs or embedded subs covering only foreign-language parts.
+
 **Embedded text-based (not VOBSUB) subtitles preferred** (correct timing):
 ```bash
 ffprobe -v error -select_streams s -show_entries stream=index,codec_name:stream_tags=language -of json "$VIDEO_FILE"
@@ -22,6 +24,8 @@ python3 scripts/validate_srt.py source.en.srt --verbose
 ```
 
 If no embedded subtitles, use external `.en.srt` file.
+
+**Overwrite protection:** `sync_subtitles.py` now auto-backs up any existing `.en.srt` at the output path to `*.bak-YYYYMMDD_HHMMSS` in the same folder before writing. This is a safety net — do not rely on it to recover from deliberate misuse.
 
 ---
 

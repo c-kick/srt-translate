@@ -28,6 +28,9 @@ import os
 import subprocess
 import sys
 import shutil
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from srt_utils import backup_if_exists
 import json
 import tempfile
 from pathlib import Path
@@ -198,6 +201,13 @@ def sync_subtitles(
             print(f"Step 2: Syncing extracted subtitle...")
     else:
         srt_to_sync = srt_path
+
+    # Back up any existing target SRT before ffsubsync overwrites it.
+    # Skips self-backup when syncing in place (srt_path == output_path).
+    if output.exists() and (not srt_path or Path(srt_path).resolve() != output.resolve()):
+        backup = backup_if_exists(str(output))
+        if backup and verbose:
+            print(f"Backed up existing {output.name} → {Path(backup).name}")
 
     # Build ffsubsync command
     cmd = [

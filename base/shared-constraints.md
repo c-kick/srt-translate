@@ -4,6 +4,14 @@ Universal rules for all phases. Injected into every pipeline invocation.
 
 ---
 
+## File Safety
+
+**Never overwrite an SRT in the video directory without first backing it up.** Before writing or replacing `${VIDEO_BASE}.en.srt` or `${VIDEO_BASE}.nl.srt` in the video folder, copy the existing file to `<name>.bak-YYYYMMDD_HHMMSS` in the same folder. The user's source and prior translations are not recoverable from the work directory. Transient files inside `WORK_DIR` are exempt.
+
+`sync_subtitles.py` enforces this automatically for its output file. Other writes (e.g. Phase 7 finalize, `validate_srt.py --fix` on the final file) must do so explicitly via `backup_if_exists()` from `srt_utils.py`.
+
+---
+
 ## Hard Constraints
 
 Values depend on the source framerate. Determine framerate before starting.
