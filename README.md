@@ -65,7 +65,7 @@ This installs `ffsubsync`, `webrtcvad`, `pysubs2`, and other dependencies into `
 | `--max-batches N` | Limit translation to N batches (testing) | 0 (unlimited) |
 | `--effort LEVEL` | Thinking effort per invocation: `low`, `medium`, `high`, `xhigh`, `max` | `medium` (pinned — not inherited from CLI default) |
 | `--budget-cap-usd AMOUNT` | Hard cost cap applied **per Claude invocation**. If exceeded, that invocation aborts and the phase fails. Scope: setup = 1 invocation, translation = 1 invocation per group of up to 6 batches (~1200 cues), post-processing = 3 invocations. Historical per-invocation costs are in `logs/srt-translate/cost_log.jsonl`. | **uncapped** |
-| `--model MODEL` | Override the model for all phases. Per-phase control via `MODEL_SETUP`, `MODEL_TRANSLATE`, `MODEL_POST` env vars. | `sonnet` (setup/post), `opus` (translation) |
+| `--model MODEL` | Override the model for all phases. Accepts an alias (`sonnet`, `opus`, `haiku` — always latest) or a pinned full ID (e.g. `claude-opus-4-7`, `claude-sonnet-4-6`). Per-phase control via `MODEL_SETUP`, `MODEL_TRANSLATE`, `MODEL_POST` env vars. | `sonnet` (setup/post), `opus` (translation) |
 
 ### Polish mode — upgrade an existing Dutch subtitle
 
