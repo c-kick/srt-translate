@@ -66,7 +66,10 @@ This installs `ffsubsync`, `webrtcvad`, `pysubs2`, and other dependencies into `
 | `--max-batches N` | Limit translation to N batches (testing) | 0 (unlimited) |
 | `--effort LEVEL` | Thinking effort per invocation: `low`, `medium`, `high`, `xhigh`, `max` | `medium` (pinned — not inherited from CLI default) |
 | `--budget-cap-usd AMOUNT` | Hard cost cap applied **per Claude invocation**. If exceeded, that invocation aborts and the phase fails. Scope: setup = 1 invocation, translation = 1 invocation per group of up to 6 batches (~1200 cues), post-processing = 3 invocations. Historical per-invocation costs are in `logs/srt-translate/cost_log.jsonl`. | **uncapped** |
-| `--model MODEL` | Override the model for all phases. Accepts an alias (`sonnet`, `opus`, `haiku` — always latest) or a pinned full ID (e.g. `claude-opus-4-7`, `claude-sonnet-4-6`). Per-phase control via `MODEL_SETUP`, `MODEL_TRANSLATE`, `MODEL_POST` env vars. | `sonnet` (setup/post), `opus` (translation) |
+| `--model MODEL` | Override the model for all phases. Accepts an alias (`sonnet`, `opus`, `haiku` — always latest) or a pinned full ID (e.g. `claude-opus-4-7`, `claude-sonnet-4-6`). Per-phase control via `MODEL_SETUP`, `MODEL_TRANSLATE`, `MODEL_POST` env vars or the per-phase flags below. | `sonnet` (setup/post), `opus` (translation) |
+| `--model-setup MODEL` | Override the model for Phases 0–1 only. Wins over `--model` and the `MODEL_SETUP` env var. | unset — falls back to `--model` / env / default |
+| `--model-translation MODEL` | Override the model for Phase 2 (translation) only. Wins over `--model` and the `MODEL_TRANSLATE` env var. | unset — falls back to `--model` / env / default |
+| `--model-post MODEL` | Override the model for Phases 3–10 (post-processing) only. Wins over `--model` and the `MODEL_POST` env var. | unset — falls back to `--model` / env / default |
 
 ### Polish mode — upgrade an existing Dutch subtitle
 

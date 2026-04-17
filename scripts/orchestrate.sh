@@ -60,6 +60,9 @@ VIDEO_FILE=""
 EFFORT="medium"    # passed to claude -p --effort (low|medium|high|xhigh|max). Pinned so CLI default drift doesn't silently change behavior.
 BUDGET_CAP_USD=""  # passed to claude -p --max-budget-usd, per invocation
 MODEL_OVERRIDE=""  # if set, overrides MODEL_SETUP/TRANSLATE/POST
+MODEL_SETUP_OVERRIDE=""      # --model-setup: wins over --model and env var
+MODEL_TRANSLATE_OVERRIDE=""  # --model-translation: wins over --model and env var
+MODEL_POST_OVERRIDE=""       # --model-post: wins over --model and env var
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -75,6 +78,9 @@ while [[ $# -gt 0 ]]; do
         --effort)       EFFORT="$2"; shift 2 ;;
         --budget-cap-usd) BUDGET_CAP_USD="$2"; shift 2 ;;
         --model)        MODEL_OVERRIDE="$2"; shift 2 ;;
+        --model-setup)       MODEL_SETUP_OVERRIDE="$2"; shift 2 ;;
+        --model-translation) MODEL_TRANSLATE_OVERRIDE="$2"; shift 2 ;;
+        --model-post)        MODEL_POST_OVERRIDE="$2"; shift 2 ;;
         --help|-h)
             echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--polish] [--phase N] [--speech-sync] [--keep-sdh] [--max-batches N]"
             echo ""
@@ -103,6 +109,9 @@ while [[ $# -gt 0 ]]; do
             echo "                  See cost_log.jsonl for historical per-invocation costs."
             echo "  --model MODEL   Override MODEL_SETUP, MODEL_TRANSLATE and MODEL_POST."
             echo "                  Use MODEL_* env vars for per-phase control."
+            echo "  --model-setup MODEL        Override model for Phases 0-1 (wins over --model and MODEL_SETUP env var)"
+            echo "  --model-translation MODEL  Override model for Phase 2 (wins over --model and MODEL_TRANSLATE env var)"
+            echo "  --model-post MODEL         Override model for Phases 3-10 (wins over --model and MODEL_POST env var)"
             exit 0
             ;;
         -*)             echo "Unknown option: $1" >&2; exit 1 ;;
@@ -115,6 +124,9 @@ if [[ -n "$MODEL_OVERRIDE" ]]; then
     MODEL_TRANSLATE="$MODEL_OVERRIDE"
     MODEL_POST="$MODEL_OVERRIDE"
 fi
+[[ -n "$MODEL_SETUP_OVERRIDE"     ]] && MODEL_SETUP="$MODEL_SETUP_OVERRIDE"
+[[ -n "$MODEL_TRANSLATE_OVERRIDE" ]] && MODEL_TRANSLATE="$MODEL_TRANSLATE_OVERRIDE"
+[[ -n "$MODEL_POST_OVERRIDE"      ]] && MODEL_POST="$MODEL_POST_OVERRIDE"
 
 if [[ -z "$VIDEO_FILE" ]]; then
     echo "Error: No video file specified." >&2
