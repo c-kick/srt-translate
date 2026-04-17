@@ -56,6 +56,9 @@ KEEP_SDH=false
 KEEP_WORK=false
 MAX_BATCHES=0  # 0 = unlimited
 VIDEO_FILE=""
+EFFORT="medium"    # passed to claude -p --effort (low|medium|high|xhigh|max). Pinned so CLI default drift doesn't silently change behavior.
+BUDGET_CAP_USD=""  # passed to claude -p --max-budget-usd, per invocation
+MODEL_OVERRIDE=""  # if set, overrides MODEL_SETUP/TRANSLATE/POST
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -67,6 +70,9 @@ while [[ $# -gt 0 ]]; do
         --keep-sdh)     KEEP_SDH=true; shift ;;
         --keep-work)    KEEP_WORK=true; shift ;;
         --max-batches)  MAX_BATCHES="$2"; shift 2 ;;
+        --effort)       EFFORT="$2"; shift 2 ;;
+        --budget-cap-usd) BUDGET_CAP_USD="$2"; shift 2 ;;
+        --model)        MODEL_OVERRIDE="$2"; shift 2 ;;
         --help|-h)
             echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--polish] [--phase N] [--speech-sync] [--keep-sdh] [--max-batches N]"
             echo ""
@@ -81,12 +87,30 @@ while [[ $# -gt 0 ]]; do
             echo "  --keep-sdh      Keep SDH cues (default: remove them before translation)"
             echo "  --keep-work     Preserve work directory after successful completion (for debugging)"
             echo "  --max-batches N Limit translation to N batches (for testing)"
+            echo "  --effort LEVEL  Thinking effort: low|medium|high|xhigh|max (applies to every invocation)"
+            echo "  --budget-cap-usd AMOUNT"
+            echo "                  Hard cost cap in USD applied PER CLAUDE INVOCATION (not per run)."
+            echo "                  If exceeded, claude aborts with exit 1 and the phase fails."
+            echo "                  Scope per invocation:"
+            echo "                    Setup        : one invocation (Phases 0-1)"
+            echo "                    Translation  : one invocation per group of up to 6 batches"
+            echo "                                   (= up to 1200 cues per invocation)"
+            echo "                    Post         : three invocations (structural / review / finalize)"
+            echo "                  See cost_log.jsonl for historical per-invocation costs."
+            echo "  --model MODEL   Override MODEL_SETUP, MODEL_TRANSLATE and MODEL_POST."
+            echo "                  Use MODEL_* env vars for per-phase control."
             exit 0
             ;;
         -*)             echo "Unknown option: $1" >&2; exit 1 ;;
         *)              VIDEO_FILE="$1"; shift ;;
     esac
 done
+
+if [[ -n "$MODEL_OVERRIDE" ]]; then
+    MODEL_SETUP="$MODEL_OVERRIDE"
+    MODEL_TRANSLATE="$MODEL_OVERRIDE"
+    MODEL_POST="$MODEL_OVERRIDE"
+fi
 
 if [[ -z "$VIDEO_FILE" ]]; then
     echo "Error: No video file specified." >&2
@@ -240,10 +264,16 @@ invoke_claude() {
     [[ -n "$model" ]] && log "  Model: $model"
     log "  Context files: $*"
 
-    # Build model flag if specified
-    local model_args=()
+    # Build optional flags
+    local extra_args=()
     if [[ -n "$model" ]]; then
-        model_args=(--model "$model")
+        extra_args+=(--model "$model")
+    fi
+    if [[ -n "${EFFORT:-}" ]]; then
+        extra_args+=(--effort "$EFFORT")
+    fi
+    if [[ -n "${BUDGET_CAP_USD:-}" ]]; then
+        extra_args+=(--max-budget-usd "$BUDGET_CAP_USD")
     fi
 
     # --allowedTools ensures non-interactive execution
@@ -256,7 +286,7 @@ invoke_claude() {
 
     # Run claude -p in background with heartbeat monitoring
     (cd "$SKILL_DIR" && echo "$prompt" | env -u CLAUDECODE claude -p \
-        "${model_args[@]}" \
+        "${extra_args[@]}" \
         --allowedTools "Read,Glob,Grep,Edit,Write,Bash(python3:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(mv:*),Bash(cp:*),Bash(mkdir:*),Bash(ffprobe:*),Bash(ffmpeg:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(scripts/*)" \
         --output-format json \
         2>"$stderr_log") > "$json_out" &
@@ -310,7 +340,12 @@ invoke_claude() {
     rm -f "$json_out"
 
     if [[ $exit_code -ne 0 ]]; then
-        log "WARNING: Claude exited with code $exit_code for: $description"
+        if grep -q "Exceeded USD budget" "$stderr_log" 2>/dev/null; then
+            log "ERROR: Budget cap (\$${BUDGET_CAP_USD}) exceeded for: $description"
+            log "  Raise --budget-cap-usd or inspect ${LOG_DIR}/cost_log.jsonl for historical costs."
+        else
+            log "WARNING: Claude exited with code $exit_code for: $description"
+        fi
     fi
     return $exit_code
 }
@@ -900,6 +935,8 @@ main() {
     log "║  SDH:   $($KEEP_SDH && echo "keep" || echo "remove (default)")"
     log "║  Mode:  $($POLISH && echo "--polish (skip translation, post-process existing NL)" || echo "full pipeline")"
     log "║  Models: setup=${MODEL_SETUP} translate=${MODEL_TRANSLATE} post=${MODEL_POST}"
+    [[ -n "$EFFORT" ]]         && log "║  Effort: ${EFFORT}"
+    [[ -n "$BUDGET_CAP_USD" ]] && log "║  Budget cap: \$${BUDGET_CAP_USD} per invocation"
     log "╚══════════════════════════════════════════════╝"
 
     # Determine starting point

@@ -61,6 +61,9 @@ This installs `ffsubsync`, `webrtcvad`, `pysubs2`, and other dependencies into `
 | `--phase N` | Start from phase N |
 | `--speech-sync` | Also run Phase 10 (VAD speech sync) |
 | `--keep-sdh` | Keep SDH cues (default: Claude removes them during translation) |
+| `--effort LEVEL` | Thinking effort per invocation: `low`, `medium`, `high`, `xhigh`, `max` (default: `medium` — pinned, not inherited from CLI default) |
+| `--budget-cap-usd AMOUNT` | Hard cost cap applied **per Claude invocation** (default: **uncapped**). If exceeded, that invocation aborts and the phase fails. Scope: setup = 1 invocation, translation = 1 invocation per group of up to 6 batches (~1200 cues), post-processing = 3 invocations. Historical per-invocation costs are in `logs/srt-translate/cost_log.jsonl`. |
+| `--model MODEL` | Override the model for all phases (default: `sonnet` for setup/post, `opus` for translation). Per-phase control via `MODEL_SETUP`, `MODEL_TRANSLATE`, `MODEL_POST` env vars. |
 
 ### Polish mode — upgrade an existing Dutch subtitle
 
