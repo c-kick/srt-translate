@@ -122,6 +122,32 @@ Models are configurable via env vars: `MODEL_SETUP` (phases 0–1), `MODEL_TRANS
 - No semicolons or exclamation marks (per Auteursbond)
 - Dual-speaker cues: second speaker line only gets a dash
 
+## Troubleshooting
+
+### Setup phase finishes but no checkpoint file is written
+
+Symptom: the orchestrator logs a normal `Cost:` line for the Setup phase, then aborts with `ERROR: Setup phase did not write checkpoint file`. The Claude output contains a sentence like *"The write requires your permission — please approve the prompt to write the checkpoint file to ..."*.
+
+Cause: this is not a real permission error. The orchestrator passes `--allowedTools` that already includes `Write`, so file writes are auto-approved in headless mode. The message is text Claude *wrote as its final response* instead of actually calling the `Write` tool — i.e. the model hallucinated a permission prompt rather than executing the write.
+
+This has been observed with `--model claude-sonnet-4-6`. Sonnet is weaker at this pipeline in general (fewer `[SC]` markers, weaker idioms, occasional tool-call defects).
+
+Fix: drop the `--model` flag and let Opus run (the default), or pass `--model claude-opus-4-7` explicitly. Re-run with `--fresh` or `--resume` as appropriate.
+
+### `claude -p` produces 0 bytes of output and exits silently
+
+Cause: `nohup` breaks `claude -p` since CLI ~2.1.87 (observed 2026-03-29).
+
+Fix: never launch the orchestrator with `nohup`. Use plain `&` backgrounding:
+
+```bash
+env -u CLAUDECODE bash orchestrate.sh "<video>" [flags] > /tmp/job.log 2>&1 &
+```
+
+### Timestamp drift between EN source and NL output
+
+`validate_srt.py --source <en.srt>` compares NL timestamps to the EN source. Phase 3 and Phase 7 run this automatically. If `drift_errors` is non-empty, restore the timestamps from the EN source before continuing — see the Phase 3 recovery steps in `base/workflow-post.md`.
+
 ## License
 
 [MIT](LICENSE) — © 2026 c_kick/Klaas Leussink
