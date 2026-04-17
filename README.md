@@ -53,19 +53,19 @@ This installs `ffsubsync`, `webrtcvad`, `pysubs2`, and other dependencies into `
 ./scripts/orchestrate.sh /path/to/video.mkv
 ```
 
-| Flag | Default | Effect |
+| Flag | Effect | Default |
 |---|---|---|
-| `--resume` | off — prompts if a checkpoint exists | Resume from last checkpoint without prompting |
-| `--fresh` | off | Delete checkpoint and start from phase 0 |
-| `--polish` | off — full pipeline | Skip translation — post-process an existing `.nl.srt` (see below) |
-| `--phase N` | off — runs from phase 0 | Start from phase N |
-| `--speech-sync` | off — Phase 10 is skipped | Also run Phase 10 (VAD speech sync) after Phase 9 |
-| `--keep-sdh` | off — Claude removes SDH during translation | Keep SDH cues in the output |
-| `--keep-work` | off — work dir deleted on success | Preserve work dir after completion (debugging) |
-| `--max-batches N` | 0 (unlimited) | Limit translation to N batches (testing) |
-| `--effort LEVEL` | `medium` (pinned — not inherited from CLI default) | Thinking effort per invocation: `low`, `medium`, `high`, `xhigh`, `max` |
-| `--budget-cap-usd AMOUNT` | **uncapped** | Hard cost cap applied **per Claude invocation**. If exceeded, that invocation aborts and the phase fails. Scope: setup = 1 invocation, translation = 1 invocation per group of up to 6 batches (~1200 cues), post-processing = 3 invocations. Historical per-invocation costs are in `logs/srt-translate/cost_log.jsonl`. |
-| `--model MODEL` | `sonnet` (setup/post), `opus` (translation) | Override the model for all phases. Per-phase control via `MODEL_SETUP`, `MODEL_TRANSLATE`, `MODEL_POST` env vars. |
+| `--resume` | Resume from last checkpoint without prompting | off — prompts if a checkpoint exists |
+| `--fresh` | Delete checkpoint and start from phase 0 | off |
+| `--polish` | Skip translation — post-process an existing `.nl.srt` (see below) | off — full pipeline |
+| `--phase N` | Start from phase N | off — runs from phase 0 |
+| `--speech-sync` | Also run Phase 10 (VAD speech sync) after Phase 9 | off — Phase 10 is skipped |
+| `--keep-sdh` | Keep SDH cues in the output | off — Claude removes SDH during translation |
+| `--keep-work` | Preserve work dir after completion (debugging) | off — work dir deleted on success |
+| `--max-batches N` | Limit translation to N batches (testing) | 0 (unlimited) |
+| `--effort LEVEL` | Thinking effort per invocation: `low`, `medium`, `high`, `xhigh`, `max` | `medium` (pinned — not inherited from CLI default) |
+| `--budget-cap-usd AMOUNT` | Hard cost cap applied **per Claude invocation**. If exceeded, that invocation aborts and the phase fails. Scope: setup = 1 invocation, translation = 1 invocation per group of up to 6 batches (~1200 cues), post-processing = 3 invocations. Historical per-invocation costs are in `logs/srt-translate/cost_log.jsonl`. | **uncapped** |
+| `--model MODEL` | Override the model for all phases. Per-phase control via `MODEL_SETUP`, `MODEL_TRANSLATE`, `MODEL_POST` env vars. | `sonnet` (setup/post), `opus` (translation) |
 
 ### Polish mode — upgrade an existing Dutch subtitle
 
