@@ -2,6 +2,67 @@
 
 AI-based deterministic subtitle-translation system for translating timed SRT subtitles to broadcast-quality Dutch. It can be installed as a Claude Code or Codex skill for interactive use, but the primary interface is the scripted `scripts/orchestrate.sh` pipeline. It follows the [Netflix Dutch Timed Text Style Guide](https://partnerhelp.netflixstudios.com/hc/en-us/articles/214969868) and [Modelrichtlijnen Nederlandse Ondertiteling](https://www.auteursbond.nl/) (Auteursbond).
 
+## Example output
+
+A dense dialogue stretch from `I Swear (2025)` shows the pipeline preserving context while tightening the Dutch output for subtitle pacing.
+
+Source EN:
+
+```srt
+776
+00:53:35,762 --> 00:53:38,677
+- How are you doing, Irene?
+- Yeah, all right, thanks.
+
+777
+00:53:38,678 --> 00:53:41,802
+- Is, um, Tommy already in?
+- He's in the hall.
+
+778
+00:53:41,803 --> 00:53:45,427
+Right, well, he's a bit nervous,
+so he might be more extreme.
+
+779
+00:53:45,428 --> 00:53:46,845
+- Hello!
+- But you'll get used to it.
+
+780
+00:53:46,970 --> 00:53:51,052
+- Understood.
+- How are you? How you doing?
+```
+
+Output NL:
+
+```srt
+559
+00:53:35,832 --> 00:53:38,623
+Alles goed, Irene?
+- Ja, prima.
+
+560
+00:53:38,748 --> 00:53:41,748
+Is Tommy er al?
+- Hij is in de zaal.
+
+561
+00:53:41,873 --> 00:53:45,373
+Hij is wat zenuwachtig,
+dus het kan heftiger zijn.
+
+562
+00:53:45,498 --> 00:53:48,112
+Maar je went eraan.
+- Begrepen.
+
+563
+00:53:48,237 --> 00:53:50,998
+Hoe gaat het?
+```
+
 ## Architecture
 
 The AI agent handles translation craft. Python scripts handle mechanical subtitle operations.
