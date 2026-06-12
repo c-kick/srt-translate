@@ -31,27 +31,50 @@ If no embedded subtitles, use external `.en.srt` file.
 
 ## Phase 0b: Title Card Detection (automatic)
 
-**Always run** after Phase 0 sync, before Phase 1 classification.
+In the orchestrated pipeline, `scripts/orchestrate.sh` runs this phase
+deterministically after the setup checkpoint is written and before translation
+starts. Do not rely on the setup agent to perform it. The commands below are
+the reference implementation for interactive/manual setup.
 
-Documentaries and historical films often have burned-in English title cards (dates, locations, names) that are absent from the English SRT but present in foreign-language subtitles. This phase detects them by downloading a foreign subtitle from OpenSubtitles and comparing timestamps.
+Documentaries and historical films often have burned-in English title cards (dates, locations, names) that are absent from the English SRT but present in foreign-language subtitles. This phase detects them by downloading a foreign subtitle from OpenSubtitles by IMDb ID, then comparing timestamps locally.
+
+Privacy boundary: the OpenSubtitles fetch step receives only the IMDb ID, language filters, API key, and OpenSubtitles file IDs. It must not receive local video paths or local subtitle paths. Local video/subtitle data is used only by the local detection step.
 
 ```bash
-scripts/run-venv.sh scripts/fetch_title_cards.py \
-    "${VIDEO_BASENAME}.en.srt" \
-    "$VIDEO_FILE" \
-    --output "${WORK_DIR}/title_cards.srt" \
-    --timeout 15
+VIDEO_NAME="$(basename "$VIDEO_FILE")"
+if [[ "$VIDEO_NAME" =~ imdb-tt([0-9]+) ]]; then
+    IMDB_ID="${BASH_REMATCH[1]}"
+else
+    echo "SKIP: No IMDb ID found in filename: $VIDEO_NAME"
+    IMDB_ID=""
+fi
+
+if [[ -n "$IMDB_ID" ]]; then
+    FETCH_STATUS=0
+    scripts/run-venv.sh scripts/fetch_foreign_subtitle.py \
+        "$IMDB_ID" \
+        --output "${WORK_DIR}/foreign.srt" \
+        --timeout 15 || FETCH_STATUS=$?
+
+    if [[ -f "${WORK_DIR}/foreign.srt" ]]; then
+        DETECT_STATUS=0
+        scripts/run-venv.sh scripts/detect_title_cards.py \
+            "${VIDEO_BASENAME}.en.srt" \
+            "${WORK_DIR}/foreign.srt" \
+            --output "${WORK_DIR}/title_cards.srt" || DETECT_STATUS=$?
+    fi
+fi
 ```
 
 **Exit codes:**
 | Code | Meaning | Action |
 |------|---------|--------|
-| 0 | Title cards found → `title_cards.srt` written | Merge into source (see below) |
+| 0 | Fetch succeeded / title cards found -> `title_cards.srt` written | Merge into source if `title_cards.srt` exists |
 | 1 | No title cards found / no foreign sub available | Continue without changes |
-| 2 | Skipped (no API key, network error, timeout) | Continue without changes; log warning |
+| 2 | Skipped (no IMDb ID, no API key, network error, timeout, parse error) | Continue without changes; log warning |
 
 **Requires:** `OPENSUBTITLES_API_KEY` env var, or `~/.config/srt-translate/os_api_key` file.
-If neither is present the script exits with code 2 and the phase is silently skipped.
+If neither is present the fetch script exits with code 2 and the phase is silently skipped.
 
 ### If title cards found (exit code 0):
 

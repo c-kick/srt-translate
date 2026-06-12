@@ -7,9 +7,6 @@ description: >
   Niet voor algemene vertaling zonder SRT-bestand, niet voor ondertiteling in andere talen dan Nederlands, niet voor audio-transcriptie.
   Primaire methode: orchestrate.sh pipeline (script-gestuurd, headless).
   Alternatief: interactieve modus voor losse fasen of review.
-compatibility: >
-  Requires ffmpeg, ffprobe, python3 with venv (ffsubsync, webrtcvad, pysubs2) in scripts/venv/.
-  CPU-only system. Claude Code only.
 metadata:
   author: Klaas
   version: 12.0
@@ -19,6 +16,10 @@ metadata:
 
 **You are a professional Dutch subtitle translator.**
 
+## Compatibility
+
+Requires `ffmpeg`, `ffprobe`, a C build toolchain for `webrtcvad`, and `python3` with `ffsubsync`, `webrtcvad`, and `pysubs2` installed in `scripts/venv/`. The automated orchestrator uses Claude Code's `claude` CLI by default. Pass `--agent codex` or `--codex` to run phase groups through `codex exec` instead.
+
 ## Primary Mode: Orchestrated Pipeline
 
 For full translations, use the orchestrator script:
@@ -27,7 +28,7 @@ For full translations, use the orchestrator script:
 ./scripts/orchestrate.sh /path/to/video.mkv
 ```
 
-The orchestrator invokes Claude in headless mode per phase group, each with a fresh context containing only the relevant instructions. This prevents attention degradation on long translations.
+The orchestrator invokes an AI coding agent in headless mode per phase group, each with a fresh context containing only the relevant instructions. This prevents attention degradation on long translations. Claude is the default backend; Codex is opt-in with `--agent codex` or `--codex`. In Codex mode, Claude model aliases are ignored and the Codex CLI uses its configured default unless the user passes an explicit non-Claude model name.
 
 | Flag | Effect |
 |------|--------|
@@ -36,13 +37,28 @@ The orchestrator invokes Claude in headless mode per phase group, each with a fr
 | `--phase N` | Start from phase N (0=setup, 2=translate, 3=post) |
 | `--speech-sync` | Also run Phase 10 after Phase 9 |
 | `--polish` | Skip translation — post-process an existing `.nl.srt` instead |
+| `--augment-missing` | Add only missing burned-in/title-card cues to an existing `.nl.srt` |
+| `--source-srt PATH` | Use an external source subtitle instead of `VIDEO_BASE.en.srt` |
+| `--source-language LANG` | Source subtitle language for non-English source runs |
+| `--output-srt PATH` | Write final output to a custom path |
+| `--source-ready` | Treat `--source-srt` as already synced; skip setup and start at translation |
 | `--max-batches N` | Stop after N translation batches (useful for testing) |
+| `--agent claude\|codex` | Choose the headless agent backend; default is `claude` |
+| `--codex` | Convenience alias for `--agent codex` |
 
 ### Polish mode
 
 `--polish` upgrades an existing Dutch subtitle without retranslating. Works on any `.nl.srt` — previous skill outputs, older versions, or third-party downloads (OpenSubtitles, Bazarr, etc.).
 
 Runs setup (Phase 0–1) to sync the source and classify content, then seeds the pipeline with the existing `.nl.srt` as the draft, runs a speaker change marker pass (Opus) to enable safe merging, and executes all post-processing phases (3–9). Costs roughly **30% of the tokens** of a full retranslation.
+
+### Augment missing mode
+
+`--augment-missing` updates an existing Dutch subtitle by adding only missing burned-in/title-card cues. It runs setup/title-card detection, extracts detected `[TITLE CARD: ...]` cues, filters out cues already covered by the existing `.nl.srt`, translates only the remaining missing cues, and merges them into the existing file with a timestamped backup.
+
+### External source mode
+
+For a non-English source SRT that already contains the complete subtitle timing/content, use `--source-srt PATH --source-language LANG --source-ready --output-srt PATH`. The orchestrator skips extraction, sync, and title-card detection, writes a deterministic checkpoint, then translates from the declared source language to Dutch and runs post-processing.
 
 ### Phase Groups
 

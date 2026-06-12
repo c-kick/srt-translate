@@ -2,15 +2,17 @@
 #
 # srt-orchestrate.sh — Deterministic pipeline for srt-translate skill
 #
-# Invokes Claude Code in headless mode (-p) per phase group, each with a
+# Invokes an AI coding agent in headless mode per phase group, each with a
 # fresh context containing ONLY the instructions relevant to that phase.
 # This eliminates attention degradation from irrelevant instructions.
+# Claude is the default backend; Codex is opt-in via --agent codex or --codex.
 #
 # Usage:
-#   ./scripts/orchestrate.sh /path/to/video.mkv [--resume] [--phase N] [--speech-sync]
+#   ./scripts/orchestrate.sh /path/to/video.mkv [--resume] [--phase N] [--speech-sync] [--agent claude|codex]
+#   ./scripts/orchestrate.sh /path/to/video.mkv --augment-missing [--agent claude|codex]
 #
 # Requirements:
-#   - claude CLI in PATH
+#   - claude CLI in PATH for the default backend, or codex CLI in PATH with --agent codex
 #   - ffmpeg, ffprobe, python3
 #   - scripts/venv/ with ffsubsync, webrtcvad, pysubs2
 #
@@ -50,6 +52,7 @@ MAX_BATCHES_PER_INVOCATION=6
 RESUME=false
 FRESH=false
 POLISH=false
+AUGMENT_MISSING=false
 START_PHASE=""
 SPEECH_SYNC=false
 KEEP_SDH=false
@@ -57,8 +60,13 @@ KEEP_WORK=false
 NO_EMBEDDED=false  # if true: skip embedded-subtitle extraction, force external .en.srt
 MAX_BATCHES=0  # 0 = unlimited
 VIDEO_FILE=""
-EFFORT="medium"    # passed to claude -p --effort (low|medium|high|xhigh|max). Pinned so CLI default drift doesn't silently change behavior.
-BUDGET_CAP_USD=""  # passed to claude -p --max-budget-usd, per invocation
+SOURCE_SRT_OVERRIDE=""
+OUTPUT_SRT_OVERRIDE=""
+SOURCE_LANGUAGE="English"
+SOURCE_READY=false
+AGENT="claude"     # claude by default; set via --agent codex or --codex to use Codex
+EFFORT="medium"    # passed to claude -p --effort (low|medium|high|xhigh|max). Ignored by Codex.
+BUDGET_CAP_USD=""  # passed to claude -p --max-budget-usd, per invocation. Ignored by Codex.
 MODEL_OVERRIDE=""  # if set, overrides MODEL_SETUP/TRANSLATE/POST
 MODEL_SETUP_OVERRIDE=""      # --model-setup: wins over --model and env var
 MODEL_TRANSLATE_OVERRIDE=""  # --model-translation: wins over --model and env var
@@ -69,20 +77,27 @@ while [[ $# -gt 0 ]]; do
         --resume)       RESUME=true; shift ;;
         --fresh)        FRESH=true; shift ;;
         --polish)       POLISH=true; shift ;;
+        --augment-missing) AUGMENT_MISSING=true; shift ;;
         --phase)        START_PHASE="$2"; shift 2 ;;
         --speech-sync)  SPEECH_SYNC=true; shift ;;
         --keep-sdh)     KEEP_SDH=true; shift ;;
         --keep-work)    KEEP_WORK=true; shift ;;
         --no-embedded)  NO_EMBEDDED=true; shift ;;
+        --source-srt)   SOURCE_SRT_OVERRIDE="$2"; shift 2 ;;
+        --source-language) SOURCE_LANGUAGE="$2"; shift 2 ;;
+        --output-srt)   OUTPUT_SRT_OVERRIDE="$2"; shift 2 ;;
+        --source-ready) SOURCE_READY=true; shift ;;
         --max-batches)  MAX_BATCHES="$2"; shift 2 ;;
         --effort)       EFFORT="$2"; shift 2 ;;
         --budget-cap-usd) BUDGET_CAP_USD="$2"; shift 2 ;;
+        --agent)        AGENT="$2"; shift 2 ;;
+        --codex)        AGENT="codex"; shift ;;
         --model)        MODEL_OVERRIDE="$2"; shift 2 ;;
         --model-setup)       MODEL_SETUP_OVERRIDE="$2"; shift 2 ;;
         --model-translation) MODEL_TRANSLATE_OVERRIDE="$2"; shift 2 ;;
         --model-post)        MODEL_POST_OVERRIDE="$2"; shift 2 ;;
         --help|-h)
-            echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--polish] [--phase N] [--speech-sync] [--keep-sdh] [--max-batches N]"
+            echo "Usage: $0 /path/to/video.mkv [--resume] [--fresh] [--polish] [--augment-missing] [--phase N] [--speech-sync] [--keep-sdh] [--max-batches N] [--agent AGENT]"
             echo ""
             echo "Options:"
             echo "  --resume        Resume from last checkpoint"
@@ -90,16 +105,28 @@ while [[ $# -gt 0 ]]; do
             echo "  --polish        Skip translation — run post-processing on existing .nl.srt"
             echo "                  Runs setup (Phase 0-1) then jumps straight to Phase 3."
             echo "                  Saves ~80%% of token cost vs a full retranslation."
+            echo "  --augment-missing"
+            echo "                  Add only missing burned-in/title-card cues to an existing .nl.srt."
+            echo "                  Runs setup/title-card detection, translates missing cues only, then merges."
             echo "  --phase N       Start from phase N (0, 2, 3)"
             echo "  --speech-sync   Run Phase 10 (speech sync) after Phase 9"
             echo "  --keep-sdh      Keep SDH cues (default: remove them before translation)"
             echo "  --keep-work     Preserve work directory after successful completion (for debugging)"
             echo "  --no-embedded   Skip embedded subtitle extraction; use the existing external .en.srt only."
             echo "                  Use when the video has burn-in subs or embedded subs covering only foreign-language parts."
+            echo "  --source-srt PATH"
+            echo "                  Use this subtitle file as source instead of VIDEO_BASE.en.srt."
+            echo "  --source-language LANG"
+            echo "                  Source subtitle language for translation prompts. Default: English"
+            echo "  --output-srt PATH"
+            echo "                  Write final Dutch subtitle here instead of VIDEO_BASE.nl.srt."
+            echo "  --source-ready  Treat --source-srt as already synced/classified input; skip setup and start at translation."
             echo "  --max-batches N Limit translation to N batches (for testing)"
             echo "  --effort LEVEL  Thinking effort: low|medium|high|xhigh|max (applies to every invocation)"
+            echo "  --agent AGENT   Agent backend to use: claude or codex. Default: claude"
+            echo "  --codex         Convenience alias for --agent codex"
             echo "  --budget-cap-usd AMOUNT"
-            echo "                  Hard cost cap in USD applied PER CLAUDE INVOCATION (not per run)."
+            echo "                  Hard cost cap in USD applied PER CLAUDE INVOCATION (not per run). Ignored by Codex."
             echo "                  If exceeded, claude aborts with exit 1 and the phase fails."
             echo "                  Scope per invocation:"
             echo "                    Setup        : one invocation (Phases 0-1)"
@@ -108,6 +135,7 @@ while [[ $# -gt 0 ]]; do
             echo "                    Post         : three invocations (structural / review / finalize)"
             echo "                  See cost_log.jsonl for historical per-invocation costs."
             echo "  --model MODEL   Override MODEL_SETUP, MODEL_TRANSLATE and MODEL_POST."
+            echo "                  For Codex, Claude aliases (sonnet/opus/haiku) are ignored so Codex uses its configured default."
             echo "                  Use MODEL_* env vars for per-phase control."
             echo "  --model-setup MODEL        Override model for Phases 0-1 (wins over --model and MODEL_SETUP env var)"
             echo "  --model-translation MODEL  Override model for Phase 2 (wins over --model and MODEL_TRANSLATE env var)"
@@ -127,6 +155,16 @@ fi
 [[ -n "$MODEL_SETUP_OVERRIDE"     ]] && MODEL_SETUP="$MODEL_SETUP_OVERRIDE"
 [[ -n "$MODEL_TRANSLATE_OVERRIDE" ]] && MODEL_TRANSLATE="$MODEL_TRANSLATE_OVERRIDE"
 [[ -n "$MODEL_POST_OVERRIDE"      ]] && MODEL_POST="$MODEL_POST_OVERRIDE"
+
+case "$AGENT" in
+    claude|codex) ;;
+    *) echo "Error: Invalid --agent: $AGENT (valid: claude, codex)" >&2; exit 1 ;;
+esac
+
+if $POLISH && $AUGMENT_MISSING; then
+    echo "Error: --polish and --augment-missing are mutually exclusive." >&2
+    exit 1
+fi
 
 if [[ -z "$VIDEO_FILE" ]]; then
     echo "Error: No video file specified." >&2
@@ -152,6 +190,13 @@ SOURCE_SRT="${VIDEO_DIR}/${VIDEO_BASENAME}.en.srt"
 WORK_DIR="${LOG_DIR}/work_${VIDEO_BASENAME}"
 GLOSSARY_FILE="${WORK_DIR}/translation_glossary.md"
 HANDOFF_FILE="${BATCH_CONTEXT_DIR}/invocation_handoff.txt"
+
+if [[ -n "$SOURCE_SRT_OVERRIDE" ]]; then
+    SOURCE_SRT="$(cd "$(dirname "$SOURCE_SRT_OVERRIDE")" && pwd)/$(basename "$SOURCE_SRT_OVERRIDE")"
+fi
+if [[ -n "$OUTPUT_SRT_OVERRIDE" ]]; then
+    OUTPUT_SRT="$(cd "$(dirname "$OUTPUT_SRT_OVERRIDE")" && pwd)/$(basename "$OUTPUT_SRT_OVERRIDE")"
+fi
 
 mkdir -p "$LOG_DIR" "$BATCH_CONTEXT_DIR" "$WORK_DIR"
 
@@ -200,8 +245,118 @@ checkpoint_get() {
 # Count cues in an SRT file (handles both Unix and Windows line endings)
 count_cues() {
     local n
-    n="$(tr -d '\r' < "$1" 2>/dev/null | grep -cE '^[0-9]+$')" || true
+    # write_srt emits UTF-8-SIG; strip UTF-8 BOM so cue 1 is counted.
+    n="$(tr -d '\r' < "$1" 2>/dev/null | sed $'1s/^\xEF\xBB\xBF//' | grep -cE '^[0-9]+$')" || true
     echo "${n:-0}"
+}
+
+checkpoint_set() {
+    local key="$1"
+    local value="$2"
+    local line="- **${key}:** ${value}"
+
+    if [[ ! -f "$CHECKPOINT_FILE" ]]; then
+        return 0
+    fi
+
+    if grep -q "^- \*\*${key}:\*\*" "$CHECKPOINT_FILE"; then
+        perl -0pi -e "s{^- \\Q**${key}:**\\E .*}{$line}m" "$CHECKPOINT_FILE"
+    else
+        printf '\n%s\n' "$line" >> "$CHECKPOINT_FILE"
+    fi
+}
+
+is_claude_model_alias() {
+    case "${1:-}" in
+        sonnet|opus|haiku) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+effective_model_label() {
+    local model="${1:-}"
+    if [[ "$AGENT" == "codex" ]]; then
+        if [[ -z "$model" ]] || is_claude_model_alias "$model"; then
+            echo "codex default"
+        else
+            echo "$model"
+        fi
+    else
+        echo "${model:-default}"
+    fi
+}
+
+extract_imdb_id() {
+    local name
+    name="$(basename "$VIDEO_FILE")"
+    if [[ "$name" =~ imdb-tt([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    elif [[ "$name" =~ tt([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo ""
+    fi
+}
+
+write_source_ready_checkpoint() {
+    [[ -f "$SOURCE_SRT" ]] || die "--source-ready requires source SRT: $SOURCE_SRT"
+
+    local source_cues
+    source_cues="$(count_cues "$SOURCE_SRT")"
+    [[ "$source_cues" -gt 0 ]] || die "--source-ready source has no cues: $SOURCE_SRT"
+
+    local framerate="25"
+    local detected_rate
+    detected_rate="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate \
+        -of default=noprint_wrappers=1:nokey=1 "$VIDEO_FILE" 2>/dev/null || true)"
+    if [[ "$detected_rate" =~ ^([0-9]+)/([0-9]+)$ && "${BASH_REMATCH[2]}" -ne 0 ]]; then
+        local rounded
+        rounded="$(awk -v n="${BASH_REMATCH[1]}" -v d="${BASH_REMATCH[2]}" 'BEGIN { printf "%.0f", n / d }')"
+        case "$rounded" in
+            24|25) framerate="$rounded" ;;
+        esac
+    fi
+
+    cat > "$CHECKPOINT_FILE" <<EOF
+# Translation Checkpoint
+
+## Video
+- **File:** ${VIDEO_FILE}
+- **Source:** ${SOURCE_SRT}
+- **Output:** ${OUTPUT_SRT}
+
+## Progress
+- **Current phase:** 1 (source-ready checkpoint)
+- **Next phase:** 2 (translation)
+
+## Phase 1 Results
+- **Framerate:** ${framerate}
+- **Classification:** documentary
+- **Source cues:** ${source_cues}
+- **Source language:** ${SOURCE_LANGUAGE}
+- **Source type:** external ready source SRT
+- **Sync method:** skipped (--source-ready)
+- **Title cards:** skipped (--source-ready source is timing/content authority)
+
+## Terminology
+- Michail Gorbatsjov
+- Michail Sergejevitsj Gorbatsjov
+- Raisa Gorbatsjova
+- Werner Herzog
+- Sovjet-Unie
+- Koude Oorlog
+- glasnost
+- perestrojka
+
+## Register
+- Historical/biographical documentary with narration, archival material, and interview segments.
+- Use clear, formal documentary Dutch for narration.
+- Use respectful spoken Dutch for interviews with Gorbatsjov and political figures.
+- Translate from ${SOURCE_LANGUAGE} to Dutch; do not assume the source is English.
+EOF
+
+    log "Source-ready checkpoint written: $CHECKPOINT_FILE"
+    log "Source language: ${SOURCE_LANGUAGE} | Source cues: ${source_cues} | Framerate: ${framerate}"
 }
 
 # Background heartbeat: emits a log line every HEARTBEAT_INTERVAL seconds
@@ -243,8 +398,16 @@ _run_heartbeat() {
     done
 }
 
-# Invoke claude with a prompt assembled from files + inline instructions
-# Usage: invoke_claude [--model MODEL] [--heartbeat-file FILE] "task description" file1.md file2.md ... <<< "inline prompt"
+# Invoke the configured agent with a prompt assembled from files + inline instructions
+# Usage: invoke_agent [--model MODEL] [--heartbeat-file FILE] "task description" file1.md file2.md ... <<< "inline prompt"
+invoke_agent() {
+    case "$AGENT" in
+        claude) invoke_claude "$@" ;;
+        codex)  invoke_codex "$@" ;;
+        *)      die "Invalid agent backend: $AGENT" ;;
+    esac
+}
+
 invoke_claude() {
     local model=""
     local heartbeat_file=""
@@ -366,12 +529,181 @@ invoke_claude() {
     return $exit_code
 }
 
+
+invoke_codex() {
+    local model=""
+    local heartbeat_file=""
+
+    while [[ "${1:-}" == --* ]]; do
+        case "$1" in
+            --model) model="$2"; shift 2 ;;
+            --heartbeat-file) heartbeat_file="$2"; shift 2 ;;
+            *) break ;;
+        esac
+    done
+
+    local description="$1"
+    shift
+    local prompt=""
+
+    for f in "$@"; do
+        if [[ -f "$f" ]]; then
+            prompt+="$(cat "$f")"$'\n\n---\n\n'
+        else
+            log "WARNING: File not found, skipping: $f"
+        fi
+    done
+
+    if [[ ! -t 0 ]]; then
+        prompt+="$(cat)"
+    fi
+
+    log "Invoking Codex: $description"
+    log "  Codex model: $(effective_model_label "$model")"
+    if [[ -n "$model" ]] && is_claude_model_alias "$model"; then
+        log "  Ignored Claude model alias for Codex: $model"
+    fi
+    log "  Context files: $*"
+
+    local extra_args=(--cd "$SKILL_DIR" --sandbox workspace-write --skip-git-repo-check)
+    extra_args+=(--add-dir "$SKILL_DIR" --add-dir "$VIDEO_DIR" --add-dir "$LOG_DIR")
+    extra_args+=(--add-dir "$(dirname "$SOURCE_SRT")" --add-dir "$(dirname "$OUTPUT_SRT")")
+
+    case "$model" in
+        ""|sonnet|opus|haiku)
+            ;;
+        *)
+            extra_args+=(--model "$model")
+            ;;
+    esac
+
+    local output_file
+    output_file="$(mktemp "${LOG_DIR}/codex_result_XXXXXX.tmp")"
+    local run_log="${LOG_DIR}/codex_run_$(date +%s).log"
+    extra_args+=(--output-last-message "$output_file")
+
+    (cd "$SKILL_DIR" && printf '%s\n' "$prompt" | codex exec "${extra_args[@]}" - >"$run_log" 2>&1) &
+    local codex_pid=$!
+
+    _run_heartbeat "$codex_pid" "$description" "$heartbeat_file" &
+    local heartbeat_pid=$!
+
+    trap "kill $codex_pid $heartbeat_pid 2>/dev/null; exit 130" INT TERM
+
+    local exit_code
+    wait "$codex_pid" && exit_code=0 || exit_code=$?
+
+    kill "$heartbeat_pid" 2>/dev/null || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+    trap - INT TERM
+
+    if [[ -s "$output_file" ]]; then
+        cat "$output_file"
+    fi
+    rm -f "$output_file"
+
+    if [[ $exit_code -ne 0 ]]; then
+        log "WARNING: Codex exited with code $exit_code for: $description"
+        log "  See Codex run log: $run_log"
+    fi
+    return $exit_code
+}
+
 # ─── Phase Group: Setup (Phases 0-1) ───────────────────────────────────────
+
+run_title_card_detection() {
+    local mode="${1:-merge}"
+    log "═══ Setup: Title Card Detection (Phase 0b) ═══"
+
+    if [[ ! -f "$SOURCE_SRT" ]]; then
+        log "Title cards skipped: source SRT not found: $SOURCE_SRT"
+        checkpoint_set "Title cards" "skipped (source SRT not found)"
+        return 0
+    fi
+
+    if grep -q '\[TITLE CARD:' "$SOURCE_SRT"; then
+        log "Title cards already present in source SRT; not re-running detection."
+        checkpoint_set "Source cues" "$(count_cues "$SOURCE_SRT")"
+        checkpoint_set "Title cards" "already present in source SRT"
+        return 0
+    fi
+
+    local imdb_id
+    imdb_id="$(extract_imdb_id)"
+    if [[ -z "$imdb_id" ]]; then
+        log "Title cards skipped: no IMDb ID found in video filename."
+        checkpoint_set "Title cards" "skipped (no IMDb ID found in filename)"
+        return 0
+    fi
+
+    local foreign_srt="${WORK_DIR}/foreign.srt"
+    local title_cards_srt="${WORK_DIR}/title_cards.srt"
+    rm -f "$title_cards_srt"
+
+    local fetch_status=0
+    # Privacy boundary: fetch by IMDb ID only; local paths stay out of OpenSubtitles.
+    "$SKILL_DIR/scripts/run-venv.sh" "$SKILL_DIR/scripts/fetch_foreign_subtitle.py" \
+        "$imdb_id" \
+        --output "$foreign_srt" \
+        --timeout 15 || fetch_status=$?
+
+    if [[ ! -s "$foreign_srt" ]]; then
+        case "$fetch_status" in
+            1)
+                log "Title cards skipped: no usable foreign subtitle found for tt${imdb_id}."
+                checkpoint_set "Title cards" "skipped (IMDb ID found: tt${imdb_id}; no usable foreign subtitle found)"
+                ;;
+            2)
+                log "Title cards skipped: OpenSubtitles unavailable or API key not configured."
+                checkpoint_set "Title cards" "skipped (IMDb ID found: tt${imdb_id}; OpenSubtitles unavailable or API key not configured)"
+                ;;
+            *)
+                log "Title cards skipped: foreign subtitle fetch failed with status ${fetch_status}."
+                checkpoint_set "Title cards" "skipped (IMDb ID found: tt${imdb_id}; foreign subtitle fetch failed: ${fetch_status})"
+                ;;
+        esac
+        return 0
+    fi
+
+    local detect_status=0
+    "$SKILL_DIR/scripts/run-venv.sh" "$SKILL_DIR/scripts/detect_title_cards.py" \
+        "$SOURCE_SRT" \
+        "$foreign_srt" \
+        --output "$title_cards_srt" || detect_status=$?
+
+    if [[ ! -s "$title_cards_srt" ]]; then
+        if [[ "$detect_status" -eq 2 ]]; then
+            log "Title cards skipped: detector could not parse subtitle files."
+            checkpoint_set "Title cards" "skipped (IMDb ID found: tt${imdb_id}; detector parse error)"
+        else
+            log "Title cards: none detected from foreign subtitle."
+            checkpoint_set "Title cards" "none detected (IMDb ID found: tt${imdb_id}; foreign subtitle fetched)"
+        fi
+        return 0
+    fi
+
+    local cards_count
+    cards_count="$(count_cues "$title_cards_srt")"
+    if [[ "$mode" == "detect-only" ]]; then
+        checkpoint_set "Title cards" "${cards_count} found for augment mode, not merged into source (IMDb ID: tt${imdb_id})"
+        log "Title cards detected for augment mode: ${cards_count}; source left unchanged."
+    else
+        "$SKILL_DIR/scripts/run-venv.sh" "$SKILL_DIR/scripts/merge_title_cards.py" \
+            "$SOURCE_SRT" \
+            "$title_cards_srt"
+
+        local source_count
+        source_count="$(count_cues "$SOURCE_SRT")"
+        checkpoint_set "Source cues" "$source_count"
+        checkpoint_set "Title cards" "${cards_count} found and merged into source (IMDb ID: tt${imdb_id})"
+        log "Title cards merged: ${cards_count}; source now has ${source_count} cues."
+    fi
+}
 
 run_setup() {
     log "═══ Phase Group: Setup (Phases 0a, 0, 0b, 1) ═══"
 
-    invoke_claude --model "$MODEL_SETUP" "Setup & Classification" \
+    invoke_agent --model "$MODEL_SETUP" "Setup & Classification" \
         "$SHARED_CONSTRAINTS" \
         "$WORKFLOW_SETUP" \
         <<EOF
@@ -393,9 +725,11 @@ NOEMB
 1. Run pre-flight checks (existing .nl.srt may be overwritten — do NOT ask for confirmation)
 2. Detect and extract source subtitles
 3. Sync source to audio (Phase 0)
-4. Run title card detection (Phase 0b) — always attempt, silently skip if no API key or timeout
-5. Classify content (Phase 1)
-6. Write checkpoint to: ${CHECKPOINT_FILE}
+4. Classify content (Phase 1)
+5. Write checkpoint to: ${CHECKPOINT_FILE}
+
+Do not run title card detection in this agent invocation. The parent orchestrator
+runs Phase 0b deterministically after this checkpoint is written.
 
 **Paths:**
 - Video: ${VIDEO_FILE}
@@ -413,6 +747,16 @@ EOF
     # Validate checkpoint was written
     if [[ ! -f "$CHECKPOINT_FILE" ]]; then
         die "Setup phase did not write checkpoint file: $CHECKPOINT_FILE"
+    fi
+
+    if [[ "$SOURCE_LANGUAGE" != "English" ]]; then
+        checkpoint_set "Title cards" "skipped (source language is ${SOURCE_LANGUAGE}; source subtitle is treated as complete)"
+        checkpoint_set "Source cues" "$(count_cues "$SOURCE_SRT")"
+        log "Title cards skipped: source language is ${SOURCE_LANGUAGE}; source subtitle is treated as complete."
+    elif $AUGMENT_MISSING; then
+        run_title_card_detection "detect-only"
+    else
+        run_title_card_detection
     fi
 
     local classification
@@ -546,7 +890,7 @@ run_translation() {
             glossary_content="$(cat "$GLOSSARY_FILE")"
         fi
 
-        invoke_claude --model "$MODEL_TRANSLATE" --heartbeat-file "${WORK_DIR}/draft.nl.srt" "Translation batches ${current_batch}-${end_of_group}" \
+        invoke_agent --model "$MODEL_TRANSLATE" --heartbeat-file "${WORK_DIR}/draft.nl.srt" "Translation batches ${current_batch}-${end_of_group}" \
             "$SHARED_CONSTRAINTS" \
             "$WORKFLOW_TRANSLATE" \
             "$translator" \
@@ -561,6 +905,9 @@ run_translation() {
 ## Task
 
 Translate cues ${cue_start} through ${cue_end} of the source subtitle file.
+
+**Source language:** ${SOURCE_LANGUAGE}
+**Translation direction:** Translate from ${SOURCE_LANGUAGE} to Dutch. Do not assume the source text is English unless the source language is English.
 
 **Framerate:** ${framerate} fps — use the corresponding CPS values from the constraints table.
 
@@ -675,7 +1022,7 @@ run_marker_pass() {
     local classification
     classification="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
 
-    invoke_claude --model "$MODEL_TRANSLATE" --heartbeat-file "${WORK_DIR}/draft.nl.srt" "Speaker change marker pass" \
+    invoke_agent --model "$MODEL_TRANSLATE" --heartbeat-file "${WORK_DIR}/draft.nl.srt" "Speaker change marker pass" \
         "$SHARED_CONSTRAINTS" \
         <<EOF
 
@@ -727,6 +1074,118 @@ EOF
 
     if [[ "$marked_cues" -lt $(( draft_cues - 5 )) ]]; then
         log "WARNING: Marker pass lost cues ($draft_cues → $marked_cues) — this should not happen"
+    fi
+}
+
+# ─── Augment: Add Missing Title-Card Cues ──────────────────────────────────
+#
+# This mode updates an existing Dutch subtitle by inserting only the missing
+# burned-in/title-card subtitles. It deliberately skips the full post-processing
+# stack so an existing translation is not rewritten as a side effect.
+
+run_augment_missing() {
+    log "═══ Augment Missing Burned-In Subtitles ═══"
+
+    [[ -f "$OUTPUT_SRT" ]] || die "--augment-missing requires an existing .nl.srt at: $OUTPUT_SRT"
+    [[ -f "$SOURCE_SRT" ]] || die "--augment-missing requires a source .en.srt at: $SOURCE_SRT"
+
+    local title_cards_srt="${WORK_DIR}/title_cards_for_augment.srt"
+    local detected_title_cards_srt="${WORK_DIR}/title_cards.srt"
+    local missing_foreign_srt="${WORK_DIR}/missing_title_cards.foreign.srt"
+    local missing_nl_srt="${WORK_DIR}/missing_title_cards.nl.srt"
+    rm -f "$title_cards_srt" "$missing_foreign_srt" "$missing_nl_srt"
+
+    if [[ -s "$detected_title_cards_srt" ]]; then
+        cp "$detected_title_cards_srt" "$title_cards_srt"
+    else
+        local extract_status=0
+        "$SKILL_DIR/scripts/run-venv.sh" "$SKILL_DIR/scripts/extract_title_cards.py" \
+            "$SOURCE_SRT" \
+            --output "$title_cards_srt" || extract_status=$?
+    fi
+
+    if [[ ! -s "$title_cards_srt" ]]; then
+        log "Augment missing: no title-card cues found in source after setup."
+        checkpoint_set "Augment missing" "none (no title-card cues found)"
+        return 0
+    fi
+
+    local filter_status=0
+    "$SKILL_DIR/scripts/run-venv.sh" "$SKILL_DIR/scripts/filter_missing_subtitles.py" \
+        "$title_cards_srt" \
+        "$OUTPUT_SRT" \
+        --output "$missing_foreign_srt" || filter_status=$?
+
+    if [[ ! -s "$missing_foreign_srt" ]]; then
+        log "Augment missing: all detected title-card cues are already covered by the existing Dutch subtitle."
+        checkpoint_set "Augment missing" "none (all detected cues already covered)"
+        return 0
+    fi
+
+    local missing_count
+    missing_count="$(count_cues "$missing_foreign_srt")"
+    log "Augment missing: translating ${missing_count} missing cue(s)."
+
+    local classification
+    classification="$(checkpoint_get "Classification" | tr '[:upper:]' '[:lower:]')"
+    [[ -z "$classification" ]] && classification="documentary"
+
+    local translator="${SKILL_DIR}/translators/${classification}.md"
+    [[ -f "$translator" ]] || translator="${SKILL_DIR}/translators/documentary.md"
+
+    invoke_agent --model "$MODEL_TRANSLATE" --heartbeat-file "$missing_nl_srt" "Translate missing burned-in subtitles" \
+        "$SHARED_CONSTRAINTS" \
+        "$translator" \
+        "$DUTCH_PATTERNS" \
+        "$COMMON_ERRORS" \
+        "$EXEMPLAR_CONDENSATION" \
+        "$EXEMPLAR_IDIOM" \
+        "$EXEMPLAR_V2" \
+        <<EOF
+
+## Task — Translate Missing Burned-In Subtitles Only
+
+Read this SRT file and translate every cue in it to Dutch:
+
+${missing_foreign_srt}
+
+The source cue text may come from a non-English OpenSubtitles file. It is a
+semantic proxy for burned-in/on-screen subtitles missing from the existing Dutch
+subtitle. Translate the meaning into natural Dutch subtitles.
+
+**Output path:** ${missing_nl_srt}
+**Expected cue count:** ${missing_count}
+
+Rules:
+1. Preserve every cue number, timestamp, and cue boundary exactly.
+2. Translate only the cue text.
+3. Do not add \`[SC]\`, \`[NM]\`, comments, explanations, credits, or markdown.
+4. Write the complete translated SRT to ${missing_nl_srt}. Do not write translated cues to the terminal.
+5. After writing, verify the output has exactly ${missing_count} cues.
+EOF
+
+    [[ -s "$missing_nl_srt" ]] || die "Augment missing translation did not produce: $missing_nl_srt"
+
+    local translated_count
+    translated_count="$(count_cues "$missing_nl_srt")"
+    if [[ "$translated_count" -ne "$missing_count" ]]; then
+        die "Augment missing translation cue count mismatch: expected ${missing_count}, got ${translated_count}"
+    fi
+
+    "$SKILL_DIR/scripts/run-venv.sh" "$SKILL_DIR/scripts/merge_missing_subtitles.py" \
+        "$OUTPUT_SRT" \
+        "$missing_nl_srt"
+
+    local output_cues
+    output_cues="$(count_cues "$OUTPUT_SRT")"
+    checkpoint_set "Augment missing" "${translated_count} cue(s) translated and merged"
+    log "Augment missing complete. Output: ${OUTPUT_SRT} (${output_cues} cues)"
+
+    if $KEEP_WORK; then
+        log "Work directory preserved (--keep-work): ${WORK_DIR}"
+    else
+        log "Cleaning up temp files..."
+        rm -rf "$WORK_DIR"
     fi
 }
 
@@ -791,7 +1250,7 @@ with open(p,'w') as f: f.write(t)
 run_postprocessing_structural() {
     log "═══ Post-Processing: Structural (Phases 3-5) ═══"
 
-    invoke_claude --model "$MODEL_POST" "Post-processing: structural (Phases 3-5)" \
+    invoke_agent --model "$MODEL_POST" "Post-processing: structural (Phases 3-5)" \
         "$SHARED_CONSTRAINTS" \
         "$WORKFLOW_POST_STRUCTURAL" \
         "$COMMON_ERRORS" \
@@ -849,7 +1308,7 @@ EOF
 run_postprocessing_review() {
     log "═══ Post-Processing: Linguistic Review (Phase 6) ═══"
 
-    invoke_claude --model "$MODEL_POST" "Post-processing: linguistic review (Phase 6)" \
+    invoke_agent --model "$MODEL_POST" "Post-processing: linguistic review (Phase 6)" \
         "$SHARED_CONSTRAINTS" \
         "$WORKFLOW_POST_REVIEW" \
         "$COMMON_ERRORS" \
@@ -888,7 +1347,7 @@ run_postprocessing_finalize() {
         speech_sync_instruction="6. **Phase 10:** Speech sync (extend to speech boundaries)"
     fi
 
-    invoke_claude --model "$MODEL_POST" "Post-processing: finalize + QC (Phases 7-11)" \
+    invoke_agent --model "$MODEL_POST" "Post-processing: finalize + QC (Phases 7-11)" \
         "$SHARED_CONSTRAINTS" \
         "$WORKFLOW_POST_FINALIZE" \
         "$COMMON_ERRORS" \
@@ -936,7 +1395,7 @@ After the log is written, report the final statistics.
 EOF
 
     if [[ ! -f "$OUTPUT_SRT" ]]; then
-        log "WARNING: Expected output not found at $OUTPUT_SRT — check Claude's output"
+        log "WARNING: Expected output not found at $OUTPUT_SRT — check ${AGENT}'s output"
     else
         log "Post-processing complete. Output: $OUTPUT_SRT"
     fi
@@ -960,14 +1419,29 @@ main() {
     log "║  Logs:  ${LOG_DIR}"
     log "║  SDH:   $($KEEP_SDH && echo "keep" || echo "remove (default)")"
     $NO_EMBEDDED && log "║  Source: external .en.srt only (embedded skipped)"
-    log "║  Mode:  $($POLISH && echo "--polish (skip translation, post-process existing NL)" || echo "full pipeline")"
-    log "║  Models: setup=${MODEL_SETUP} translate=${MODEL_TRANSLATE} post=${MODEL_POST}"
+    [[ -n "$SOURCE_SRT_OVERRIDE" ]] && log "║  Source SRT: ${SOURCE_SRT}"
+    [[ "$SOURCE_LANGUAGE" != "English" ]] && log "║  Source language: ${SOURCE_LANGUAGE}"
+    [[ -n "$OUTPUT_SRT_OVERRIDE" ]] && log "║  Output SRT: ${OUTPUT_SRT}"
+    local mode_label="full pipeline"
+    $POLISH && mode_label="--polish (skip translation, post-process existing NL)"
+    $AUGMENT_MISSING && mode_label="--augment-missing (add missing burned-in subtitles only)"
+    log "║  Mode:  ${mode_label}"
+    log "║  Agent: ${AGENT}"
+    log "║  Models: setup=$(effective_model_label "$MODEL_SETUP") translate=$(effective_model_label "$MODEL_TRANSLATE") post=$(effective_model_label "$MODEL_POST")"
     [[ -n "$EFFORT" ]]         && log "║  Effort: ${EFFORT}"
     [[ -n "$BUDGET_CAP_USD" ]] && log "║  Budget cap: \$${BUDGET_CAP_USD} per invocation"
+    if [[ "$AGENT" == "codex" && -n "$BUDGET_CAP_USD" ]]; then
+        log "║  Note: budget cap is Claude-only and will be ignored by Codex"
+    fi
     log "╚══════════════════════════════════════════════╝"
 
     # Determine starting point
     local start_group="setup"
+
+    if $SOURCE_READY; then
+        write_source_ready_checkpoint
+        start_group="translation"
+    fi
 
     # --fresh: delete checkpoint + work artifacts and skip prompt
     if $FRESH; then
@@ -975,10 +1449,15 @@ main() {
         rm -rf "$WORK_DIR"
         rm -rf "$BATCH_CONTEXT_DIR"
         log "Fresh run: checkpoint, work dir, and batch context deleted."
+        if $SOURCE_READY; then
+            mkdir -p "$WORK_DIR" "$BATCH_CONTEXT_DIR"
+            write_source_ready_checkpoint
+            start_group="translation"
+        fi
     fi
 
     # If a checkpoint exists and no explicit --resume or --phase was given, ask
-    if [[ -f "$CHECKPOINT_FILE" ]] && ! $RESUME && [[ -z "$START_PHASE" ]]; then
+    if [[ -f "$CHECKPOINT_FILE" ]] && ! $RESUME && [[ -z "$START_PHASE" ]] && ! $AUGMENT_MISSING && ! $SOURCE_READY; then
         local current_phase
         current_phase="$(checkpoint_get "Current phase")"
         log "Checkpoint found: $CHECKPOINT_FILE"
@@ -1036,6 +1515,15 @@ main() {
             *)    die "Invalid phase: $START_PHASE (valid: 0-9)" ;;
         esac
         log "Override: starting from phase group '$start_group'"
+    fi
+
+    # --augment-missing: run setup/title-card detection, translate only missing
+    # detected cues, and merge them into the existing Dutch subtitle.
+    if $AUGMENT_MISSING; then
+        [[ -f "$OUTPUT_SRT" ]] || die "--augment-missing requires an existing .nl.srt at: $OUTPUT_SRT"
+        run_setup
+        run_augment_missing
+        return
     fi
 
     # --polish: run setup, seed draft, add SC markers, then post-process

@@ -1,0 +1,4 @@
+interface:
+  display_name: "SRT Translate"
+  short_description: "Translate timed SRT subtitles to Dutch"
+  default_prompt: "Use $srt-translate to translate this SRT subtitle file to Dutch."
