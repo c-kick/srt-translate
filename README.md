@@ -1,23 +1,23 @@
 # srt-translate
 
-A [Claude Code](https://claude.ai/code) skill for translating English SRT subtitle files to broadcast-quality Dutch. Follows the [Netflix Dutch Timed Text Style Guide](https://partnerhelp.netflixstudios.com/hc/en-us/articles/214969868) and [Modelrichtlijnen Nederlandse Ondertiteling](https://www.auteursbond.nl/) (Auteursbond).
+AI-based deterministic subtitle-translation system for translating existing SRT subtitle, in any language,  to broadcast-quality Dutch subtitles. Follows the [Netflix Dutch Timed Text Style Guide](https://partnerhelp.netflixstudios.com/hc/en-us/articles/214969868) and [Modelrichtlijnen Nederlandse Ondertiteling](https://www.auteursbond.nl/) (Auteursbond).
 
 ## Architecture
 
-Claude handles translation craft. Python scripts handle everything mechanical.
+The AI-model handles translation craft. Python scripts handle everything mechanical.
 
-| Claude (linguistic) | Scripts (mechanical) |
+| AI-model (linguistic) | Scripts (mechanical) |
 |---|---|
 | Translation quality | CPS calculation and extension |
 | Merge decisions | Gap enforcement |
 | Register, idiom, V2 word order | Timecode arithmetic |
 | Line breaks | Structural validation and renumbering |
 
-The pipeline runs in phase groups, each in a fresh Claude invocation to prevent attention degradation on long files.
+The pipeline runs in phase groups, each in a fresh AI-model invocation to prevent attention degradation on long files.
 
 ## Requirements
 
-- [Claude Code](https://claude.ai/code)
+- Claude or Codex CLI
 - `ffmpeg` and `ffprobe`
 - Python 3 with venv (see setup below)
 
